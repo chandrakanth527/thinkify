@@ -133,19 +133,19 @@
 .node-add-btn,
 .node-delete-btn {
   position: absolute;
-  width: 28px;
-  height: 28px;
+  width: 26px;
+  height: 26px;
   display: none;
   align-items: center;
   justify-content: center;
-  border: 2px solid white;
+  border: 1px solid rgba(255, 255, 255, 0.85);
   border-radius: 50%;
-  font-size: 18px;
-  font-weight: bold;
-  color: white;
+  font-size: 0;
+  background: rgba(15, 118, 110, 0.92);
+  color: #f8fafc;
   cursor: pointer;
-  transition: all 0.2s;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  transition: all 0.18s ease;
+  box-shadow: 0 6px 14px rgba(15, 118, 110, 0.28);
   z-index: 20;
 }
 
@@ -155,17 +155,15 @@
 }
 
 .node-add-btn {
-  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-  right: -14px;
+  right: -18px;
   top: 50%;
   transform: translateY(-50%);
-  line-height: 1;
-  padding-bottom: 2px;
 }
 
 .node-add-btn:hover {
-  background: linear-gradient(135deg, #059669 0%, #047857 100%);
-  transform: translateY(-50%) scale(1.15);
+  background: rgba(13, 148, 136, 1);
+  transform: translateY(-50%) scale(1.08);
+  box-shadow: 0 8px 18px rgba(13, 148, 136, 0.3);
 }
 
 .node-delete-btn {
@@ -178,6 +176,27 @@
 .node-delete-btn:hover {
   background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
   transform: scale(1.15);
+}
+
+.node-collapse-count {
+  position: absolute;
+  top: -12px;
+  right: -12px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+  color: #f8fafc;
+  font-weight: 600;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow:
+    0 8px 18px rgba(15, 23, 42, 0.35),
+    0 2px 8px rgba(15, 23, 42, 0.25);
+  pointer-events: none;
+  z-index: 25;
 }
 
 /* ==================== TOOLBAR STYLES ==================== */
@@ -222,6 +241,12 @@
   gap: 6px;
 }
 
+.toolbar-btn.icon-only {
+  padding: 10px;
+  width: 38px;
+  justify-content: center;
+}
+
 .toolbar-btn:hover {
   background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
   border-color: #cbd5e1;
@@ -238,6 +263,14 @@
 .toolbar-btn.danger:hover {
   background: linear-gradient(135deg, #fecaca 0%, #fca5a5 100%);
   border-color: #f87171;
+}
+
+.toolbar-btn:disabled,
+.toolbar-btn.icon-only:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
 }
 
 .icon-btn {
@@ -477,4 +510,15 @@
     flex: 1;
     justify-content: center;
   }
+}
+.floating-toolbar-anchor {
+  position: absolute;
+  transform: translate(-50%, calc(-100% - var(--toolbar-offset, 20px)));
+  pointer-events: none;
+  z-index: 150;
+}
+
+.floating-toolbar-anchor .mindmap-floating-toolbar,
+.floating-toolbar-anchor .floating-popover {
+  pointer-events: auto;
 }

@@ -83,3 +83,21 @@ export const IconMore = createIcon([
   <path key="dots" d="M5 12h.01M12 12h.01M19 12h.01" />, 
 ])
 ;
+
+export const IconUndo = createIcon([
+  <path key="arrow" d="M9 14 4 9l5-5" />, 
+  <path key="curve" d="M20 18v-1a7 7 0 0 0-7-7H4" />, 
+]);
+
+export const IconRedo = createIcon([
+  <path key="arrow" d="m15 14 5-5-5-5" />, 
+  <path key="curve" d="M4 18v-1a7 7 0 0 1 7-7h11" />, 
+]);
+
+export const IconCollapse = createIcon([
+  <path key="arrow" d="m6 9 6 6 6-6" />,
+]);
+
+export const IconExpand = createIcon([
+  <path key="arrow" d="m6 15 6-6 6 6" />,
+]);

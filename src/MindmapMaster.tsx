@@ -19,17 +19,21 @@ import {
   type EdgeChange,
   BackgroundVariant,
 } from '@xyflow/react';
-import { useCallback, useEffect, useState, useRef } from 'react';
-import dagre from '@dagrejs/dagre';
+import { useCallback, useEffect, useState, useRef, useMemo, type CSSProperties } from 'react';
+import { useStore } from '@xyflow/react';
 
 import {
+  IconCollapse,
   IconDownload,
+  IconExpand,
   IconLayout,
   IconMore,
   IconPalette,
   IconPlus,
+  IconRedo,
   IconSparkle,
   IconTrash,
+  IconUndo,
   IconUpload,
   IconMagicWand,
 } from '@/icons';
@@ -41,6 +45,8 @@ interface MindmapNodeData {
   level: number;
   color?: string;
   emoji?: string;
+  collapsed?: boolean;
+  hiddenChildCount?: number;
 }
 
 type MindmapNode = Node<MindmapNodeData, 'mindmap'>;
@@ -64,6 +70,161 @@ const COLORS = [
 const EMOJIS = ['💡', '⭐', '🎯', '🚀', '💎', '🔥', '✨', '🎨', '📌', '🏆'];
 
 let nodeIdCounter = 100;
+
+interface Snapshot {
+  nodes: MindmapNode[];
+  edges: MindmapEdge[];
+}
+
+const cloneNodeForHistory = (node: MindmapNode): MindmapNode => ({
+  ...node,
+  data: { ...node.data },
+  position: node.position ? { ...node.position } : node.position,
+  positionAbsolute: node.positionAbsolute ? { ...node.positionAbsolute } : undefined,
+  style: node.style ? { ...node.style } : undefined,
+  measured: node.measured ? { ...node.measured } : undefined,
+});
+
+const cloneNodesForHistory = (nodes: MindmapNode[]): MindmapNode[] => nodes.map(cloneNodeForHistory);
+
+const cloneEdgesForHistory = (edges: MindmapEdge[]): MindmapEdge[] =>
+  edges.map((edge) => ({
+    ...edge,
+    data: edge.data ? { ...edge.data } : undefined,
+    style: edge.style ? { ...edge.style } : undefined,
+  }));
+
+const computeCollapseInfo = (nodes: MindmapNode[], edges: MindmapEdge[]): CollapseInfo => {
+  const nodeMap = new Map<string, MindmapNode>(nodes.map((node) => [node.id, node]));
+  const childrenMap = new Map<string, string[]>();
+  const parentMap = new Map<string, string>();
+
+  edges.forEach((edge) => {
+    if (!childrenMap.has(edge.source)) {
+      childrenMap.set(edge.source, []);
+    }
+    childrenMap.get(edge.source)!.push(edge.target);
+    parentMap.set(edge.target, edge.source);
+  });
+
+  const subtreeSize = new Map<string, number>();
+  const sizeVisited = new Set<string>();
+
+  const computeSize = (nodeId: string): number => {
+    if (subtreeSize.has(nodeId)) {
+      return subtreeSize.get(nodeId)!;
+    }
+    if (sizeVisited.has(nodeId)) {
+      return 0;
+    }
+    sizeVisited.add(nodeId);
+    const children = childrenMap.get(nodeId) ?? [];
+    let total = 0;
+    for (const child of children) {
+      total += 1 + computeSize(child);
+    }
+    subtreeSize.set(nodeId, total);
+    return total;
+  };
+
+  nodes
+    .filter((node) => !parentMap.has(node.id))
+    .forEach((node) => computeSize(node.id));
+
+  const visibleIds = new Set<string>();
+  const hiddenChildCount = new Map<string, number>();
+  const visited = new Set<string>();
+
+  const traverse = (nodeId: string, ancestorCollapsed: boolean) => {
+    if (visited.has(nodeId)) {
+      return;
+    }
+    visited.add(nodeId);
+
+    const node = nodeMap.get(nodeId);
+    if (!node) {
+      return;
+    }
+
+    const collapsed = Boolean(node.data?.collapsed);
+    const children = childrenMap.get(nodeId) ?? [];
+
+    if (!ancestorCollapsed) {
+      visibleIds.add(nodeId);
+    }
+
+    let hiddenTotal = 0;
+    if (collapsed || ancestorCollapsed) {
+      for (const childId of children) {
+        hiddenTotal += 1 + (subtreeSize.get(childId) ?? 0);
+        traverse(childId, true);
+      }
+    } else {
+      for (const childId of children) {
+        traverse(childId, false);
+      }
+    }
+
+    hiddenChildCount.set(nodeId, collapsed ? hiddenTotal : 0);
+  };
+
+  nodes
+    .filter((node) => !parentMap.has(node.id))
+    .forEach((node) => traverse(node.id, false));
+
+  nodes
+    .filter((node) => !visited.has(node.id))
+    .forEach((node) => traverse(node.id, false));
+
+  if (visibleIds.size === 0) {
+    nodes.forEach((node) => visibleIds.add(node.id));
+  }
+
+  return {
+    visibleIds,
+    hiddenChildCount,
+  };
+};
+
+const applyCollapseState = (
+  nodes: MindmapNode[],
+  edges: MindmapEdge[],
+  info?: CollapseInfo,
+): { nodes: MindmapNode[]; edges: MindmapEdge[] } => {
+  const collapseInfo = info ?? computeCollapseInfo(nodes, edges);
+
+  if (collapseInfo.visibleIds.size === 0) {
+    nodes.forEach((node) => collapseInfo.visibleIds.add(node.id));
+  }
+
+  const nodeClones = nodes.map((node) => {
+    const collapsed = Boolean(node.data?.collapsed);
+    const nextData = { ...node.data };
+    const hiddenCount = collapseInfo.hiddenChildCount.get(node.id) ?? 0;
+    if (collapsed) {
+      nextData.hiddenChildCount = hiddenCount;
+    } else {
+      delete nextData.hiddenChildCount;
+    }
+
+    return {
+      ...node,
+      data: nextData,
+      hidden: !collapseInfo.visibleIds.has(node.id),
+    };
+  });
+
+  const edgeClones = edges.map((edge) => ({
+    ...edge,
+    hidden:
+      !collapseInfo.visibleIds.has(edge.source) || !collapseInfo.visibleIds.has(edge.target),
+  }));
+
+  return {
+    nodes: nodeClones,
+    edges: edgeClones,
+  };
+};
 
 // ==================== LAYOUT ALGORITHM ====================
 
@@ -214,13 +375,19 @@ const MindmapNodeComponent = ({ data, id, selected }: any) => {
       </div>
 
       <button
-        className="node-add-btn icon-btn"
+        className="node-add-btn"
         onClick={() => window.dispatchEvent(new CustomEvent('add-child', { detail: { parentId: id } }))}
         title="Add child"
         type="button"
       >
-        <IconPlus size={16} />
+        <IconPlus size={14} strokeWidth={2.2} />
       </button>
+
+      {data.hiddenChildCount ? (
+        <div className="node-collapse-count" title={`${data.hiddenChildCount} hidden child${data.hiddenChildCount === 1 ? '' : 'ren'}`}>
+          {data.hiddenChildCount}
+        </div>
+      ) : null}
     </div>
   );
 };
@@ -237,9 +404,13 @@ interface ToolbarProps {
   onExport: () => void;
   onImport: () => void;
   onClear: () => void;
+  onUndo: () => void;
+  onRedo: () => void;
+  canUndo: boolean;
+  canRedo: boolean;
 }
 
-const Toolbar = ({ onAddRoot, onAutoLayout, onExport, onImport, onClear }: ToolbarProps) => (
+const Toolbar = ({ onAddRoot, onAutoLayout, onExport, onImport, onClear, onUndo, onRedo, canUndo, canRedo }: ToolbarProps) => (
   <Panel position="top-left" className="mindmap-toolbar">
     <div className="toolbar-section">
       <button
@@ -287,6 +458,25 @@ const Toolbar = ({ onAddRoot, onAutoLayout, onExport, onImport, onClear }: Toolb
         <IconTrash size={18} />
         <span>Clear</span>
       </button>
+      <div className="toolbar-divider" />
+      <button
+        onClick={onUndo}
+        className="toolbar-btn icon-only"
+        title="Undo"
+        type="button"
+        disabled={!canUndo}
+      >
+        <IconUndo size={18} />
+      </button>
+      <button
+        onClick={onRedo}
+        className="toolbar-btn icon-only"
+        title="Redo"
+        type="button"
+        disabled={!canRedo}
+      >
+        <IconRedo size={18} />
+      </button>
     </div>
   </Panel>
 );
@@ -297,6 +487,7 @@ interface NodeActionToolbarProps {
   onDelete: (nodeId: string) => void;
   onColorChange: (color: string) => void;
   onEmojiChange: (emoji: string) => void;
+  onToggleCollapse: (nodeId: string, collapsed: boolean) => void;
 }
 
 const NodeActionToolbar = ({
@@ -305,123 +496,157 @@ const NodeActionToolbar = ({
   onDelete,
   onColorChange,
   onEmojiChange,
+  onToggleCollapse,
 }: NodeActionToolbarProps) => {
   const [showColors, setShowColors] = useState(false);
   const [showEmojis, setShowEmojis] = useState(false);
+  const transform = useStore((state) => state.transform);
 
   useEffect(() => {
     setShowColors(false);
     setShowEmojis(false);
   }, [node?.id]);
 
-  if (!node) {
+  const [viewportX, viewportY, zoom] = transform;
+  const anchorStyle = useMemo(() => {
+    if (!node) {
+      return null;
+    }
+
+    const position = node.positionAbsolute ?? node.position;
+    const baseWidth = node.measured?.width ?? node.width ?? 160;
+    const baseHeight = node.measured?.height ?? node.height ?? 60;
+
+    return {
+      left: viewportX + ((position?.x ?? 0) + baseWidth / 2) * zoom,
+      top: viewportY + (position?.y ?? 0) * zoom,
+      '--toolbar-offset': `${(baseHeight + 16) * zoom}px`,
+    } as CSSProperties;
+  }, [node, viewportX, viewportY, zoom]);
+
+  if (!node || !anchorStyle) {
     return null;
   }
 
+  const isCollapsed = Boolean(node.data?.collapsed);
+
   return (
-    <Panel position="top-center" className="mindmap-floating-toolbar">
-      <button
-        className="icon-btn"
-        onClick={() => onAddChild(node.id)}
-        title="Add child node"
-        type="button"
-      >
-        <IconPlus size={18} />
-      </button>
-
-      <div className="floating-divider" />
-
-      <div className="floating-group">
+    <div className="floating-toolbar-anchor" style={anchorStyle}>
+      <div className="mindmap-floating-toolbar">
         <button
           className="icon-btn"
-          onClick={() => setShowColors((prev) => !prev)}
-          title="Change color"
+          onClick={() => onToggleCollapse(node.id, !isCollapsed)}
+          title={isCollapsed ? 'Expand children' : 'Collapse children'}
           type="button"
-          aria-expanded={showColors}
         >
-          <IconPalette size={18} />
+          {isCollapsed ? <IconExpand size={18} /> : <IconCollapse size={18} />}
         </button>
-        {showColors && (
-          <div className="floating-popover">
-            {COLORS.map((color) => (
-              <button
-                key={color.value}
-                className="color-option"
-                style={{ background: color.value }}
-                onClick={() => {
-                  onColorChange(color.value);
-                  setShowColors(false);
-                }}
-                title={color.name}
-                type="button"
-              />
-            ))}
-          </div>
-        )}
-      </div>
 
-      <div className="floating-group">
+        <div className="floating-divider" />
+
         <button
           className="icon-btn"
-          onClick={() => setShowEmojis((prev) => !prev)}
-          title="Add emoji"
+          onClick={() => onAddChild(node.id)}
+          title="Add child node"
           type="button"
-          aria-expanded={showEmojis}
         >
-          <IconSparkle size={18} />
+          <IconPlus size={18} />
         </button>
-        {showEmojis && (
-          <div className="floating-popover emoji-picker">
-            {EMOJIS.map((emoji) => (
+
+        <div className="floating-divider" />
+
+        <div className="floating-group">
+          <button
+            className="icon-btn"
+            onClick={() => setShowColors((prev) => !prev)}
+            title="Change color"
+            type="button"
+            aria-expanded={showColors}
+          >
+            <IconPalette size={18} />
+          </button>
+          {showColors && (
+            <div className="floating-popover">
+              {COLORS.map((color) => (
+                <button
+                  key={color.value}
+                  className="color-option"
+                  style={{ background: color.value }}
+                  onClick={() => {
+                    onColorChange(color.value);
+                    setShowColors(false);
+                  }}
+                  title={color.name}
+                  type="button"
+                />
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="floating-group">
+          <button
+            className="icon-btn"
+            onClick={() => setShowEmojis((prev) => !prev)}
+            title="Add emoji"
+            type="button"
+            aria-expanded={showEmojis}
+          >
+            <IconSparkle size={18} />
+          </button>
+          {showEmojis && (
+            <div className="floating-popover emoji-picker">
+              {EMOJIS.map((emoji) => (
+                <button
+                  key={emoji}
+                  className="emoji-option"
+                  onClick={() => {
+                    onEmojiChange(emoji);
+                    setShowEmojis(false);
+                  }}
+                  type="button"
+                >
+                  {emoji}
+                </button>
+              ))}
               <button
-                key={emoji}
                 className="emoji-option"
                 onClick={() => {
-                  onEmojiChange(emoji);
+                  onEmojiChange('');
                   setShowEmojis(false);
                 }}
                 type="button"
+                title="Remove emoji"
               >
-                {emoji}
+                <IconMore size={18} />
               </button>
-            ))}
-            <button
-              className="emoji-option"
-              onClick={() => {
-                onEmojiChange('');
-                setShowEmojis(false);
-              }}
-              type="button"
-              title="Remove emoji"
-            >
-              <IconMore size={18} />
-            </button>
-          </div>
-        )}
+            </div>
+          )}
+        </div>
+
+        <div className="floating-divider" />
+
+        <button
+          className="icon-btn ghost"
+          title="More actions coming soon"
+          type="button"
+          disabled
+        >
+          <IconMagicWand size={18} />
+        </button>
+
+        <div className="floating-divider" />
+
+        <button
+          className="icon-btn danger"
+          onClick={() => onDelete(node.id)}
+          title="Delete node"
+          type="button"
+        >
+          <IconTrash size={18} />
+        </button>
       </div>
-
-      <div className="floating-divider" />
-
-      <button
-        className="icon-btn ghost"
-        title="More actions coming soon"
-        type="button"
-        disabled
-      >
-        <IconMagicWand size={18} />
-      </button>
-
-      <div className="floating-divider" />
-
-      <button
-        className="icon-btn danger"
-        onClick={() => onDelete(node.id)}
-        title="Delete node"
-        type="button"
-      >
-        <IconTrash size={18} />
-      </button>
-    </Panel>
+    </div>
   );
 };
 
@@ -440,11 +665,17 @@ const MindmapMasterFlow = () => {
   const [nodes, setNodes, onNodesChange] = useNodesState<MindmapNode>(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState<MindmapEdge>([]);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
-  const { fitView } = useReactFlow();
+  const { fitView, setCenter } = useReactFlow();
+  const transformStore = useStore((state) => state.transform);
+  const transformRef = useRef<[number, number, number]>([0, 0, 1]);
 
   // Canonical graph refs to avoid stale closures
   const nodesRef = useRef(nodes);
   const edgesRef = useRef(edges);
+  const historyRef = useRef<Snapshot[]>([]);
+  const historyIndexRef = useRef(-1);
+  const isRestoringRef = useRef(false);
+  const [historyState, setHistoryState] = useState({ canUndo: false, canRedo: false });
 
   useEffect(() => {
     nodesRef.current = nodes;
@@ -453,6 +684,46 @@ const MindmapMasterFlow = () => {
   useEffect(() => {
     edgesRef.current = edges;
   }, [edges]);
+
+  useEffect(() => {
+    transformRef.current = transformStore;
+  }, [transformStore]);
+
+  const syncHistoryMeta = useCallback(() => {
+    setHistoryState({
+      canUndo: historyIndexRef.current > 0,
+      canRedo: historyIndexRef.current >= 0 && historyIndexRef.current < historyRef.current.length - 1,
+    });
+  }, []);
+
+  const pushHistory = useCallback(
+    (nodesSnapshot: MindmapNode[], edgesSnapshot: MindmapEdge[]) => {
+      const trimmed = historyRef.current.slice(0, historyIndexRef.current + 1);
+      trimmed.push({
+        nodes: cloneNodesForHistory(nodesSnapshot),
+        edges: cloneEdgesForHistory(edgesSnapshot),
+      });
+      historyRef.current = trimmed;
+      historyIndexRef.current = trimmed.length - 1;
+      syncHistoryMeta();
+    },
+    [syncHistoryMeta],
+  );
+
+  const restoreSnapshot = useCallback(
+    (snapshot: Snapshot) => {
+      isRestoringRef.current = true;
+      const nodesCopy = cloneNodesForHistory(snapshot.nodes);
+      const edgesCopy = cloneEdgesForHistory(snapshot.edges);
+      const { nodes: finalNodes, edges: finalEdges } = applyCollapseState(nodesCopy, edgesCopy);
+      nodesRef.current = finalNodes;
+      edgesRef.current = finalEdges;
+      setNodes(finalNodes);
+      setEdges(finalEdges);
+      isRestoringRef.current = false;
+    },
+    [setEdges, setNodes],
+  );
 
   const updateGraph = useCallback(
     (
@@ -469,17 +740,49 @@ const MindmapMasterFlow = () => {
         }
 
         const { nodes: nextNodesRaw, edges: nextEdges } = result;
-        const layoutedNodes = getLayoutedElements(nextNodesRaw, nextEdges);
 
-        nodesRef.current = layoutedNodes;
-        edgesRef.current = nextEdges;
-        setEdges(nextEdges);
-        requestAnimationFrame(() => fitView({ duration: 300, padding: 0.2 }));
+        const collapseInfo = computeCollapseInfo(nextNodesRaw, nextEdges);
+        const visibleNodeMap = new Map<string, MindmapNode>();
+        nextNodesRaw.forEach((node) => {
+          if (collapseInfo.visibleIds.has(node.id)) {
+            visibleNodeMap.set(node.id, node);
+          }
+        });
 
-        return layoutedNodes;
+        const visibleNodes = Array.from(visibleNodeMap.values());
+        const visibleEdges = nextEdges.filter(
+          (edge) => collapseInfo.visibleIds.has(edge.source) && collapseInfo.visibleIds.has(edge.target),
+        );
+
+        const layoutedVisibleNodes = getLayoutedElements(visibleNodes, visibleEdges);
+        const positionMap = new Map<string, MindmapNode>(layoutedVisibleNodes.map((node) => [node.id, node]));
+
+        const layoutedNodes = nextNodesRaw.map((node) => {
+          const layoutNode = positionMap.get(node.id);
+          if (!layoutNode) {
+            return { ...node };
+          }
+          return {
+            ...node,
+            position: layoutNode.position,
+            positionAbsolute: layoutNode.position,
+          };
+        });
+
+        const { nodes: finalNodes, edges: finalEdges } = applyCollapseState(layoutedNodes, nextEdges, collapseInfo);
+
+        nodesRef.current = finalNodes;
+        edgesRef.current = finalEdges;
+        setEdges(finalEdges);
+
+        if (!isRestoringRef.current) {
+          pushHistory(finalNodes, finalEdges);
+        }
+
+        return finalNodes;
       });
     },
-    [fitView, setEdges, setNodes],
+    [pushHistory, setEdges, setNodes],
   );
 
   const relayout = useCallback(() => {
@@ -489,12 +792,76 @@ const MindmapMasterFlow = () => {
     }));
   }, [updateGraph]);
 
+  const focusNodes = useCallback(
+    (nodeIds: string[]) => {
+      const targets = nodesRef.current.filter((n) => nodeIds.includes(n.id));
+      if (targets.length === 0) {
+        return;
+      }
+
+      let minX = Number.POSITIVE_INFINITY;
+      let minY = Number.POSITIVE_INFINITY;
+      let maxX = Number.NEGATIVE_INFINITY;
+      let maxY = Number.NEGATIVE_INFINITY;
+
+      targets.forEach((node) => {
+        const position = node.positionAbsolute ?? node.position ?? { x: 0, y: 0 };
+        const width = node.measured?.width ?? node.width ?? 160;
+        const height = node.measured?.height ?? node.height ?? 60;
+        minX = Math.min(minX, position.x);
+        minY = Math.min(minY, position.y);
+        maxX = Math.max(maxX, position.x + width);
+        maxY = Math.max(maxY, position.y + height);
+      });
+
+      const centerX = (minX + maxX) / 2;
+      const centerY = (minY + maxY) / 2;
+      const [, , zoom] = transformRef.current;
+
+      setCenter(centerX, centerY, {
+        zoom,
+        duration: 250,
+      });
+    },
+    [setCenter],
+  );
+
+  const undo = useCallback(() => {
+    if (historyIndexRef.current <= 0) {
+      return;
+    }
+
+    historyIndexRef.current -= 1;
+    const snapshot = historyRef.current[historyIndexRef.current];
+    restoreSnapshot(snapshot);
+    syncHistoryMeta();
+    setSelectedNodeId(null);
+  }, [restoreSnapshot, syncHistoryMeta, setSelectedNodeId]);
+
+  const redo = useCallback(() => {
+    if (historyIndexRef.current < 0 || historyIndexRef.current >= historyRef.current.length - 1) {
+      return;
+    }
+
+    historyIndexRef.current += 1;
+    const snapshot = historyRef.current[historyIndexRef.current];
+    restoreSnapshot(snapshot);
+    syncHistoryMeta();
+    setSelectedNodeId(null);
+  }, [restoreSnapshot, syncHistoryMeta, setSelectedNodeId]);
+
   useEffect(() => {
     updateGraph((currentNodes, currentEdges) => ({
       nodes: [...currentNodes],
       edges: [...currentEdges],
     }));
-  }, [updateGraph]);
+
+    const timeout = setTimeout(() => {
+      fitView({ padding: 0.25, duration: 300 });
+    }, 0);
+
+    return () => clearTimeout(timeout);
+  }, [fitView, updateGraph]);
 
   // Add child node
   const addChild = useCallback(
@@ -532,8 +899,12 @@ const MindmapMasterFlow = () => {
           edges: [...currentEdges, newEdge],
         };
       });
+
+      requestAnimationFrame(() => {
+        focusNodes([parentId, newId]);
+      });
     },
-    [updateGraph],
+    [focusNodes, updateGraph],
   );
 
   // Delete node and descendants
@@ -636,6 +1007,30 @@ const MindmapMasterFlow = () => {
     [selectedNodeId, updateGraph],
   );
 
+  const toggleCollapse = useCallback(
+    (nodeId: string, collapsed: boolean) => {
+      updateGraph((nodesState, edgesState) => ({
+        nodes: nodesState.map((node) =>
+          node.id === nodeId
+            ? {
+                ...node,
+                data: {
+                  ...node.data,
+                  collapsed,
+                },
+              }
+            : node,
+        ),
+        edges: edgesState,
+      }));
+
+      requestAnimationFrame(() => {
+        focusNodes([nodeId]);
+      });
+    },
+    [focusNodes, updateGraph],
+  );
+
   // Add root node
   const addRootNode = useCallback(() => {
     updateGraph((currentNodes, currentEdges) => {
@@ -714,8 +1109,9 @@ const MindmapMasterFlow = () => {
         data: { label: 'My Mindmap', level: 0, color: COLORS[0].value },
       }];
       updateGraph(() => ({ nodes: resetNodes, edges: [] }));
+      setSelectedNodeId(null);
     }
-  }, [updateGraph]);
+  }, [setSelectedNodeId, updateGraph]);
 
   // Event listeners
   useEffect(() => {
@@ -735,11 +1131,29 @@ const MindmapMasterFlow = () => {
       updateNodeLabel(id, label);
     };
 
-    // Handle keyboard delete
+    // Handle keyboard shortcuts
     const handleKeyDown = (e: KeyboardEvent) => {
       // Only delete if not editing and a node is selected
       const activeElement = document.activeElement;
       const isEditing = activeElement?.tagName === 'INPUT' || activeElement?.tagName === 'TEXTAREA';
+
+      if ((e.metaKey || e.ctrlKey) && !isEditing) {
+        const key = e.key.toLowerCase();
+        if (key === 'z') {
+          e.preventDefault();
+          if (e.shiftKey) {
+            redo();
+          } else {
+            undo();
+          }
+          return;
+        }
+        if (key === 'y') {
+          e.preventDefault();
+          redo();
+          return;
+        }
+      }
 
       if ((e.key === 'Delete' || e.key === 'Backspace') && !isEditing && selectedNodeId) {
         const nodeToDelete = nodesRef.current.find((n) => n.id === selectedNodeId);
@@ -763,7 +1177,7 @@ const MindmapMasterFlow = () => {
       window.removeEventListener('update-node-label', handleUpdateLabel);
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [addChild, deleteNode, updateNodeLabel, selectedNodeId]);
+  }, [addChild, deleteNode, updateNodeLabel, redo, selectedNodeId, undo]);
 
   // Track selection
   const handleNodesChange = useCallback((changes: NodeChange[]) => {
@@ -805,6 +1219,10 @@ const MindmapMasterFlow = () => {
           onExport={exportData}
           onImport={importData}
           onClear={clearAll}
+          onUndo={undo}
+          onRedo={redo}
+          canUndo={historyState.canUndo}
+          canRedo={historyState.canRedo}
         />
 
         <NodeActionToolbar
@@ -813,6 +1231,7 @@ const MindmapMasterFlow = () => {
           onDelete={deleteNode}
           onColorChange={changeNodeColor}
           onEmojiChange={changeNodeEmoji}
+          onToggleCollapse={toggleCollapse}
         />
       </ReactFlow>
     </div>
