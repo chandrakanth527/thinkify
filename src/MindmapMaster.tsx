@@ -76,6 +76,11 @@ interface Snapshot {
   edges: MindmapEdge[];
 }
 
+interface CollapseInfo {
+  visibleIds: Set<string>;
+  hiddenChildCount: Map<string, number>;
+}
+
 const cloneNodeForHistory = (node: MindmapNode): MindmapNode => ({
   ...node,
   data: { ...node.data },
@@ -732,55 +737,54 @@ const MindmapMasterFlow = () => {
         currentEdges: MindmapEdge[],
       ) => { nodes: MindmapNode[]; edges: MindmapEdge[] } | null,
     ) => {
-      setNodes((prevNodes) => {
-        const prevEdges = edgesRef.current;
-        const result = mutator(prevNodes, prevEdges);
-        if (!result) {
-          return prevNodes;
+      const prevNodes = nodesRef.current;
+      const prevEdges = edgesRef.current;
+      const result = mutator(prevNodes, prevEdges);
+      if (!result) {
+        return;
+      }
+
+      const { nodes: nextNodesRaw, edges: nextEdges } = result;
+
+      const collapseInfo = computeCollapseInfo(nextNodesRaw, nextEdges);
+      const visibleNodeMap = new Map<string, MindmapNode>();
+      nextNodesRaw.forEach((node) => {
+        if (collapseInfo.visibleIds.has(node.id)) {
+          visibleNodeMap.set(node.id, node);
         }
-
-        const { nodes: nextNodesRaw, edges: nextEdges } = result;
-
-        const collapseInfo = computeCollapseInfo(nextNodesRaw, nextEdges);
-        const visibleNodeMap = new Map<string, MindmapNode>();
-        nextNodesRaw.forEach((node) => {
-          if (collapseInfo.visibleIds.has(node.id)) {
-            visibleNodeMap.set(node.id, node);
-          }
-        });
-
-        const visibleNodes = Array.from(visibleNodeMap.values());
-        const visibleEdges = nextEdges.filter(
-          (edge) => collapseInfo.visibleIds.has(edge.source) && collapseInfo.visibleIds.has(edge.target),
-        );
-
-        const layoutedVisibleNodes = getLayoutedElements(visibleNodes, visibleEdges);
-        const positionMap = new Map<string, MindmapNode>(layoutedVisibleNodes.map((node) => [node.id, node]));
-
-        const layoutedNodes = nextNodesRaw.map((node) => {
-          const layoutNode = positionMap.get(node.id);
-          if (!layoutNode) {
-            return { ...node };
-          }
-          return {
-            ...node,
-            position: layoutNode.position,
-            positionAbsolute: layoutNode.position,
-          };
-        });
-
-        const { nodes: finalNodes, edges: finalEdges } = applyCollapseState(layoutedNodes, nextEdges, collapseInfo);
-
-        nodesRef.current = finalNodes;
-        edgesRef.current = finalEdges;
-        setEdges(finalEdges);
-
-        if (!isRestoringRef.current) {
-          pushHistory(finalNodes, finalEdges);
-        }
-
-        return finalNodes;
       });
+
+      const visibleNodes = Array.from(visibleNodeMap.values());
+      const visibleEdges = nextEdges.filter(
+        (edge) => collapseInfo.visibleIds.has(edge.source) && collapseInfo.visibleIds.has(edge.target),
+      );
+
+      const layoutedVisibleNodes = getLayoutedElements(visibleNodes, visibleEdges);
+      const positionMap = new Map<string, MindmapNode>(layoutedVisibleNodes.map((node) => [node.id, node]));
+
+      const layoutedNodes = nextNodesRaw.map((node) => {
+        const layoutNode = positionMap.get(node.id);
+        if (!layoutNode) {
+          return { ...node };
+        }
+        return {
+          ...node,
+          position: layoutNode.position,
+          positionAbsolute: layoutNode.position,
+        };
+      });
+
+      const { nodes: finalNodes, edges: finalEdges } = applyCollapseState(layoutedNodes, nextEdges, collapseInfo);
+
+      nodesRef.current = finalNodes;
+      edgesRef.current = finalEdges;
+
+      setNodes(finalNodes);
+      setEdges(finalEdges);
+
+      if (!isRestoringRef.current) {
+        pushHistory(finalNodes, finalEdges);
+      }
     },
     [pushHistory, setEdges, setNodes],
   );
@@ -866,13 +870,14 @@ const MindmapMasterFlow = () => {
   // Add child node
   const addChild = useCallback(
     (parentId: string) => {
+      const newId = `node-${nodeIdCounter++}`;
+
       updateGraph((currentNodes, currentEdges) => {
         const parent = currentNodes.find((n) => n.id === parentId);
         if (!parent) {
           return null;
         }
 
-        const newId = `node-${nodeIdCounter++}`;
         const newNode: MindmapNode = {
           id: newId,
           type: 'mindmap',
