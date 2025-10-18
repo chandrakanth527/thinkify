@@ -240,59 +240,122 @@
   border-color: #f87171;
 }
 
-/* Color Picker */
-.color-picker {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  margin-top: 8px;
-  background: white;
-  border-radius: 12px;
-  padding: 12px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
-  z-index: 100;
-}
-
-.color-option {
-  width: 48px;
-  height: 48px;
-  border: 3px solid white;
-  border-radius: 12px;
+.icon-btn {
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  color: #334155;
   cursor: pointer;
   transition: all 0.2s;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.icon-btn:hover {
+  background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
+  border-color: #cbd5e1;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(15, 23, 42, 0.12);
+}
+
+.icon-btn.danger {
+  background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+  border-color: #fca5a5;
+  color: #b91c1c;
+}
+
+.icon-btn.danger:hover {
+  border-color: #ef4444;
+  box-shadow: 0 4px 12px rgba(248, 113, 113, 0.25);
+}
+
+.icon-btn.ghost,
+.icon-btn:disabled {
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  border-style: dashed;
+  border-color: #cbd5e1;
+  color: #94a3b8;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+  opacity: 0.8;
+}
+
+.mindmap-floating-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow:
+    0 12px 30px rgba(15, 23, 42, 0.15),
+    0 2px 8px rgba(15, 23, 42, 0.08);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  z-index: 200;
+}
+
+.floating-divider {
+  width: 1px;
+  height: 28px;
+  background: linear-gradient(180deg, rgba(203, 213, 225, 0) 0%, rgba(148, 163, 184, 0.6) 50%, rgba(203, 213, 225, 0) 100%);
+}
+
+.floating-group {
+  position: relative;
+}
+
+.floating-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: white;
+  border-radius: 14px;
+  border: 1px solid #e2e8f0;
+  box-shadow:
+    0 16px 32px rgba(15, 23, 42, 0.18),
+    0 4px 12px rgba(15, 23, 42, 0.12);
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+  z-index: 250;
+}
+
+.floating-popover:not(.emoji-picker) {
+  grid-template-columns: repeat(5, 1fr);
+}
+
+.floating-popover.emoji-picker {
+  grid-template-columns: repeat(5, 1fr);
+}
+
+/* Color Picker */
+.color-option {
+  width: 32px;
+  height: 32px;
+  border: 2px solid white;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
 }
 
 .color-option:hover {
   transform: scale(1.1);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
-}
-
-/* Emoji Picker */
-.emoji-picker {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  margin-top: 8px;
-  background: white;
-  border-radius: 12px;
-  padding: 12px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 8px;
-  z-index: 100;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
 }
 
 .emoji-option {
-  width: 40px;
-  height: 40px;
-  border: 2px solid #e5e7eb;
+  width: 36px;
+  height: 36px;
+  border: 1px solid #e5e7eb;
   border-radius: 8px;
-  font-size: 20px;
+  font-size: 18px;
   cursor: pointer;
   background: white;
   transition: all 0.2s;
@@ -303,8 +366,8 @@
 
 .emoji-option:hover {
   background: #f3f4f6;
-  border-color: #667eea;
-  transform: scale(1.1);
+  border-color: #64748b;
+  transform: scale(1.08);
 }
 
 /* ==================== INFO PANEL ==================== */

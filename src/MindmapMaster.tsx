@@ -19,8 +19,20 @@ import {
   type EdgeChange,
   BackgroundVariant,
 } from '@xyflow/react';
-import { useCallback, useEffect, useState, useRef, type MouseEvent } from 'react';
+import { useCallback, useEffect, useState, useRef } from 'react';
 import dagre from '@dagrejs/dagre';
+
+import {
+  IconDownload,
+  IconLayout,
+  IconMore,
+  IconPalette,
+  IconPlus,
+  IconSparkle,
+  IconTrash,
+  IconUpload,
+  IconMagicWand,
+} from '@/icons';
 
 // ==================== TYPES ====================
 
@@ -202,11 +214,12 @@ const MindmapNodeComponent = ({ data, id, selected }: any) => {
       </div>
 
       <button
-        className="node-add-btn"
+        className="node-add-btn icon-btn"
         onClick={() => window.dispatchEvent(new CustomEvent('add-child', { detail: { parentId: id } }))}
         title="Add child"
+        type="button"
       >
-        +
+        <IconPlus size={16} />
       </button>
     </div>
   );
@@ -218,101 +231,196 @@ const nodeTypes = {
 
 // ==================== TOOLBAR COMPONENT ====================
 
-const Toolbar = ({
-  onAddRoot,
-  onExport,
-  onImport,
-  onClear,
-  onAutoLayout,
-  selectedNode,
+interface ToolbarProps {
+  onAddRoot: () => void;
+  onAutoLayout: () => void;
+  onExport: () => void;
+  onImport: () => void;
+  onClear: () => void;
+}
+
+const Toolbar = ({ onAddRoot, onAutoLayout, onExport, onImport, onClear }: ToolbarProps) => (
+  <Panel position="top-left" className="mindmap-toolbar">
+    <div className="toolbar-section">
+      <button
+        onClick={onAddRoot}
+        className="toolbar-btn"
+        title="Add root node"
+        type="button"
+      >
+        <IconPlus size={18} />
+        <span>Root</span>
+      </button>
+      <button
+        onClick={onAutoLayout}
+        className="toolbar-btn"
+        title="Auto-layout nodes"
+        type="button"
+      >
+        <IconLayout size={18} />
+        <span>Layout</span>
+      </button>
+      <button
+        onClick={onExport}
+        className="toolbar-btn"
+        title="Export as JSON"
+        type="button"
+      >
+        <IconDownload size={18} />
+        <span>Export</span>
+      </button>
+      <button
+        onClick={onImport}
+        className="toolbar-btn"
+        title="Import JSON"
+        type="button"
+      >
+        <IconUpload size={18} />
+        <span>Import</span>
+      </button>
+      <button
+        onClick={onClear}
+        className="toolbar-btn danger"
+        title="Clear all"
+        type="button"
+      >
+        <IconTrash size={18} />
+        <span>Clear</span>
+      </button>
+    </div>
+  </Panel>
+);
+
+interface NodeActionToolbarProps {
+  node: MindmapNode | null;
+  onAddChild: (parentId: string) => void;
+  onDelete: (nodeId: string) => void;
+  onColorChange: (color: string) => void;
+  onEmojiChange: (emoji: string) => void;
+}
+
+const NodeActionToolbar = ({
+  node,
+  onAddChild,
+  onDelete,
   onColorChange,
   onEmojiChange,
-}: any) => {
-  const [showColorPicker, setShowColorPicker] = useState(false);
-  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+}: NodeActionToolbarProps) => {
+  const [showColors, setShowColors] = useState(false);
+  const [showEmojis, setShowEmojis] = useState(false);
+
+  useEffect(() => {
+    setShowColors(false);
+    setShowEmojis(false);
+  }, [node?.id]);
+
+  if (!node) {
+    return null;
+  }
 
   return (
-    <Panel position="top-left" className="mindmap-toolbar">
-      <div className="toolbar-section">
-        <button onClick={onAddRoot} className="toolbar-btn" title="Add root node">
-          <span>➕ Root</span>
+    <Panel position="top-center" className="mindmap-floating-toolbar">
+      <button
+        className="icon-btn"
+        onClick={() => onAddChild(node.id)}
+        title="Add child node"
+        type="button"
+      >
+        <IconPlus size={18} />
+      </button>
+
+      <div className="floating-divider" />
+
+      <div className="floating-group">
+        <button
+          className="icon-btn"
+          onClick={() => setShowColors((prev) => !prev)}
+          title="Change color"
+          type="button"
+          aria-expanded={showColors}
+        >
+          <IconPalette size={18} />
         </button>
-        <button onClick={onAutoLayout} className="toolbar-btn" title="Auto-layout nodes">
-          <span>🔄 Layout</span>
-        </button>
-        <button onClick={onExport} className="toolbar-btn" title="Export as JSON">
-          <span>💾 Export</span>
-        </button>
-        <button onClick={onImport} className="toolbar-btn" title="Import JSON">
-          <span>📂 Import</span>
-        </button>
-        <button onClick={onClear} className="toolbar-btn danger" title="Clear all">
-          <span>🗑️ Clear</span>
-        </button>
+        {showColors && (
+          <div className="floating-popover">
+            {COLORS.map((color) => (
+              <button
+                key={color.value}
+                className="color-option"
+                style={{ background: color.value }}
+                onClick={() => {
+                  onColorChange(color.value);
+                  setShowColors(false);
+                }}
+                title={color.name}
+                type="button"
+              />
+            ))}
+          </div>
+        )}
       </div>
 
-      {selectedNode && (
-        <div className="toolbar-section">
-          <div className="toolbar-divider" />
-          <button
-            onClick={() => setShowColorPicker(!showColorPicker)}
-            className="toolbar-btn"
-            title="Change color"
-          >
-            🎨
-          </button>
-          {showColorPicker && (
-            <div className="color-picker">
-              {COLORS.map(color => (
-                <button
-                  key={color.value}
-                  className="color-option"
-                  style={{ background: color.value }}
-                  onClick={() => {
-                    onColorChange(color.value);
-                    setShowColorPicker(false);
-                  }}
-                  title={color.name}
-                />
-              ))}
-            </div>
-          )}
-
-          <button
-            onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-            className="toolbar-btn"
-            title="Add emoji"
-          >
-            😀
-          </button>
-          {showEmojiPicker && (
-            <div className="emoji-picker">
-              {EMOJIS.map(emoji => (
-                <button
-                  key={emoji}
-                  className="emoji-option"
-                  onClick={() => {
-                    onEmojiChange(emoji);
-                    setShowEmojiPicker(false);
-                  }}
-                >
-                  {emoji}
-                </button>
-              ))}
+      <div className="floating-group">
+        <button
+          className="icon-btn"
+          onClick={() => setShowEmojis((prev) => !prev)}
+          title="Add emoji"
+          type="button"
+          aria-expanded={showEmojis}
+        >
+          <IconSparkle size={18} />
+        </button>
+        {showEmojis && (
+          <div className="floating-popover emoji-picker">
+            {EMOJIS.map((emoji) => (
               <button
+                key={emoji}
                 className="emoji-option"
                 onClick={() => {
-                  onEmojiChange('');
-                  setShowEmojiPicker(false);
+                  onEmojiChange(emoji);
+                  setShowEmojis(false);
                 }}
-                title="Remove emoji"
+                type="button"
               >
-                ✕
+                {emoji}
               </button>
-            </div>
-          )}
-        </div>
-      )}
+            ))}
+            <button
+              className="emoji-option"
+              onClick={() => {
+                onEmojiChange('');
+                setShowEmojis(false);
+              }}
+              type="button"
+              title="Remove emoji"
+            >
+              <IconMore size={18} />
+            </button>
+          </div>
+        )}
+      </div>
+
+      <div className="floating-divider" />
+
+      <button
+        className="icon-btn ghost"
+        title="More actions coming soon"
+        type="button"
+        disabled
+      >
+        <IconMagicWand size={18} />
+      </button>
+
+      <div className="floating-divider" />
+
+      <button
+        className="icon-btn danger"
+        onClick={() => onDelete(node.id)}
+        title="Delete node"
+        type="button"
+      >
+        <IconTrash size={18} />
+      </button>
     </Panel>
   );
 };
@@ -332,9 +440,9 @@ const MindmapMasterFlow = () => {
   const [nodes, setNodes, onNodesChange] = useNodesState<MindmapNode>(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState<MindmapEdge>([]);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
-  const { fitView, getNodes, getEdges } = useReactFlow();
+  const { fitView } = useReactFlow();
 
-  // Create refs to always have current state
+  // Canonical graph refs to avoid stale closures
   const nodesRef = useRef(nodes);
   const edgesRef = useRef(edges);
 
@@ -346,130 +454,205 @@ const MindmapMasterFlow = () => {
     edgesRef.current = edges;
   }, [edges]);
 
-  const applyLayout = useCallback(
-    (nextNodes: MindmapNode[], nextEdges: MindmapEdge[]) => {
-      const layoutedNodes = getLayoutedElements(nextNodes, nextEdges);
-      nodesRef.current = layoutedNodes;
-      edgesRef.current = nextEdges;
-      setNodes(layoutedNodes);
-      setEdges(nextEdges);
-      requestAnimationFrame(() => fitView({ duration: 300, padding: 0.2 }));
+  const updateGraph = useCallback(
+    (
+      mutator: (
+        currentNodes: MindmapNode[],
+        currentEdges: MindmapEdge[],
+      ) => { nodes: MindmapNode[]; edges: MindmapEdge[] } | null,
+    ) => {
+      setNodes((prevNodes) => {
+        const prevEdges = edgesRef.current;
+        const result = mutator(prevNodes, prevEdges);
+        if (!result) {
+          return prevNodes;
+        }
+
+        const { nodes: nextNodesRaw, edges: nextEdges } = result;
+        const layoutedNodes = getLayoutedElements(nextNodesRaw, nextEdges);
+
+        nodesRef.current = layoutedNodes;
+        edgesRef.current = nextEdges;
+        setEdges(nextEdges);
+        requestAnimationFrame(() => fitView({ duration: 300, padding: 0.2 }));
+
+        return layoutedNodes;
+      });
     },
-    [fitView, setNodes, setEdges],
+    [fitView, setEdges, setNodes],
   );
 
   const relayout = useCallback(() => {
-    applyLayout(nodesRef.current, edgesRef.current);
-  }, [applyLayout]);
+    updateGraph((currentNodes, currentEdges) => ({
+      nodes: [...currentNodes],
+      edges: [...currentEdges],
+    }));
+  }, [updateGraph]);
 
-  // Initial layout
   useEffect(() => {
-    applyLayout(initialNodes, []);
-  }, [applyLayout]);
+    updateGraph((currentNodes, currentEdges) => ({
+      nodes: [...currentNodes],
+      edges: [...currentEdges],
+    }));
+  }, [updateGraph]);
 
   // Add child node
-  const addChild = useCallback((parentId: string) => {
-    const parent = nodesRef.current.find((n) => n.id === parentId);
-    if (!parent) return;
+  const addChild = useCallback(
+    (parentId: string) => {
+      updateGraph((currentNodes, currentEdges) => {
+        const parent = currentNodes.find((n) => n.id === parentId);
+        if (!parent) {
+          return null;
+        }
 
-    const newId = `node-${nodeIdCounter++}`;
-    const newNode: MindmapNode = {
-      id: newId,
-      type: 'mindmap',
-      position: { x: 0, y: 0 },
-      data: {
-        label: 'New Topic',
-        level: parent.data.level + 1,
-        color: COLORS[(parent.data.level + 1) % COLORS.length].value,
-      },
-    };
+        const newId = `node-${nodeIdCounter++}`;
+        const newNode: MindmapNode = {
+          id: newId,
+          type: 'mindmap',
+          position: { x: 0, y: 0 },
+          data: {
+            label: 'New Topic',
+            level: parent.data.level + 1,
+            color: COLORS[(parent.data.level + 1) % COLORS.length].value,
+          },
+        };
 
-    const newEdge: MindmapEdge = {
-      id: `${parentId}-${newId}`,
-      source: parentId,
-      target: newId,
-      sourceHandle: 'right',
-      targetHandle: 'left',
-      type: 'default',
-      style: { stroke: '#cbd5e1', strokeWidth: 2.5 },
-    };
+        const newEdge: MindmapEdge = {
+          id: `${parentId}-${newId}`,
+          source: parentId,
+          target: newId,
+          sourceHandle: 'right',
+          targetHandle: 'left',
+          type: 'default',
+          style: { stroke: '#cbd5e1', strokeWidth: 2.5 },
+        };
 
-    // Calculate layout with the new node to get its correct position
-    const nextNodes = [...nodesRef.current, newNode];
-    const nextEdges = [...edgesRef.current, newEdge];
-    applyLayout(nextNodes, nextEdges);
-  }, [applyLayout]);
+        return {
+          nodes: [...currentNodes, newNode],
+          edges: [...currentEdges, newEdge],
+        };
+      });
+    },
+    [updateGraph],
+  );
 
   // Delete node and descendants
-  const deleteNode = useCallback((nodeId: string) => {
-    // Use refs to get current state
-    const currentNodes = nodesRef.current;
-    const currentEdges = edgesRef.current;
+  const deleteNode = useCallback(
+    (nodeId: string) => {
+      updateGraph((currentNodes, currentEdges) => {
+        const childrenMap = new Map<string, string[]>();
+        currentEdges.forEach((edge) => {
+          if (!childrenMap.has(edge.source)) {
+            childrenMap.set(edge.source, []);
+          }
+          childrenMap.get(edge.source)!.push(edge.target);
+        });
 
-    // Build a map of parent -> children for faster lookup
-    const childrenMap = new Map<string, string[]>();
-    currentEdges.forEach(edge => {
-      if (!childrenMap.has(edge.source)) {
-        childrenMap.set(edge.source, []);
-      }
-      childrenMap.get(edge.source)!.push(edge.target);
-    });
+        const nodesToDelete = new Set<string>();
+        const collectDescendants = (id: string) => {
+          nodesToDelete.add(id);
+          const children = childrenMap.get(id) || [];
+          children.forEach((childId) => collectDescendants(childId));
+        };
 
-    // Collect all nodes to delete (node + all descendants)
-    const nodesToDelete = new Set<string>();
-    const collectDescendants = (id: string) => {
-      nodesToDelete.add(id);
-      const children = childrenMap.get(id) || [];
-      children.forEach(childId => collectDescendants(childId));
-    };
+        collectDescendants(nodeId);
 
-    collectDescendants(nodeId);
+        const filteredNodes = currentNodes.filter((n) => !nodesToDelete.has(n.id));
+        const filteredEdges = currentEdges.filter(
+          (e) => !nodesToDelete.has(e.source) && !nodesToDelete.has(e.target),
+        );
 
-    // Filter out deleted nodes and edges
-    const newNodes = currentNodes.filter(n => !nodesToDelete.has(n.id));
-    const newEdges = currentEdges.filter(e =>
-      !nodesToDelete.has(e.source) && !nodesToDelete.has(e.target)
-    );
-
-    // Update states
-    applyLayout(newNodes, newEdges);
-  }, [applyLayout]);
+        return {
+          nodes: filteredNodes,
+          edges: filteredEdges,
+        };
+      });
+    },
+    [updateGraph],
+  );
 
   // Update node label
-  const updateNodeLabel = useCallback((id: string, label: string) => {
-    setNodes(nds => nds.map(n => n.id === id ? { ...n, data: { ...n.data, label } } : n));
-  }, [setNodes]);
+  const updateNodeLabel = useCallback(
+    (id: string, label: string) => {
+      updateGraph((nodesState, edgesState) => ({
+        nodes: nodesState.map((n) =>
+          n.id === id
+            ? {
+                ...n,
+                data: {
+                  ...n.data,
+                  label,
+                },
+              }
+            : n,
+        ),
+        edges: edgesState,
+      }));
+    },
+    [updateGraph],
+  );
 
   // Change node color
-  const changeNodeColor = useCallback((color: string) => {
-    if (!selectedNodeId) return;
-    setNodes(nds => nds.map(n =>
-      n.id === selectedNodeId ? { ...n, data: { ...n.data, color } } : n
-    ));
-  }, [selectedNodeId, setNodes]);
+  const changeNodeColor = useCallback(
+    (color: string) => {
+      if (!selectedNodeId) return;
+      updateGraph((nodesState, edgesState) => ({
+        nodes: nodesState.map((n) =>
+          n.id === selectedNodeId
+            ? {
+                ...n,
+                data: {
+                  ...n.data,
+                  color,
+                },
+              }
+            : n,
+        ),
+        edges: edgesState,
+      }));
+    },
+    [selectedNodeId, updateGraph],
+  );
 
   // Change node emoji
-  const changeNodeEmoji = useCallback((emoji: string) => {
-    if (!selectedNodeId) return;
-    setNodes(nds => nds.map(n =>
-      n.id === selectedNodeId ? { ...n, data: { ...n.data, emoji } } : n
-    ));
-  }, [selectedNodeId, setNodes]);
+  const changeNodeEmoji = useCallback(
+    (emoji: string) => {
+      if (!selectedNodeId) return;
+      updateGraph((nodesState, edgesState) => ({
+        nodes: nodesState.map((n) =>
+          n.id === selectedNodeId
+            ? {
+                ...n,
+                data: {
+                  ...n.data,
+                  emoji,
+                },
+              }
+            : n,
+        ),
+        edges: edgesState,
+      }));
+    },
+    [selectedNodeId, updateGraph],
+  );
 
   // Add root node
   const addRootNode = useCallback(() => {
-    const newId = `root-${nodeIdCounter++}`;
-    const newNode: MindmapNode = {
-      id: newId,
-      type: 'mindmap',
-      position: { x: 0, y: 0 },
-      data: { label: 'New Root', level: 0, color: COLORS[0].value },
-    };
+    updateGraph((currentNodes, currentEdges) => {
+      const newId = `root-${nodeIdCounter++}`;
+      const newNode: MindmapNode = {
+        id: newId,
+        type: 'mindmap',
+        position: { x: 0, y: 0 },
+        data: { label: 'New Root', level: 0, color: COLORS[0].value },
+      };
 
-    // Calculate layout with the new node to get its correct position
-    const nextNodes = [...nodesRef.current, newNode];
-    applyLayout(nextNodes, edgesRef.current);
-  }, [applyLayout]);
+      return {
+        nodes: [...currentNodes, newNode],
+        edges: currentEdges,
+      };
+    });
+  }, [updateGraph]);
 
   // Export
   const exportData = useCallback(() => {
@@ -511,7 +694,7 @@ const MindmapMasterFlow = () => {
             type: 'default',
             style: { stroke: '#cbd5e1', strokeWidth: 2.5 },
           }));
-          applyLayout(importedNodes, importedEdges);
+          updateGraph(() => ({ nodes: importedNodes, edges: importedEdges }));
         } catch (err) {
           alert('Invalid file format');
         }
@@ -519,7 +702,7 @@ const MindmapMasterFlow = () => {
       reader.readAsText(file);
     };
     input.click();
-  }, [setNodes, setEdges, relayout]);
+  }, [updateGraph]);
 
   // Clear all
   const clearAll = useCallback(() => {
@@ -530,9 +713,9 @@ const MindmapMasterFlow = () => {
         position: { x: 0, y: 0 },
         data: { label: 'My Mindmap', level: 0, color: COLORS[0].value },
       }];
-      applyLayout(resetNodes, []);
+      updateGraph(() => ({ nodes: resetNodes, edges: [] }));
     }
-  }, [addChild, deleteNode, updateNodeLabel, selectedNodeId, nodes, applyLayout]);
+  }, [updateGraph]);
 
   // Event listeners
   useEffect(() => {
@@ -541,8 +724,11 @@ const MindmapMasterFlow = () => {
       addChild(parentId);
     };
     const handleDeleteNode = (e: Event) => {
-      const { id } = (e as CustomEvent).detail;
-      deleteNode(id);
+      const detail = (e as CustomEvent).detail as { id?: string; nodeId?: string };
+      const nodeId = detail?.id ?? detail?.nodeId;
+      if (nodeId) {
+        deleteNode(nodeId);
+      }
     };
     const handleUpdateLabel = (e: Event) => {
       const { id, label } = (e as CustomEvent).detail;
@@ -619,7 +805,12 @@ const MindmapMasterFlow = () => {
           onExport={exportData}
           onImport={importData}
           onClear={clearAll}
-          selectedNode={selectedNode}
+        />
+
+        <NodeActionToolbar
+          node={selectedNode}
+          onAddChild={addChild}
+          onDelete={deleteNode}
           onColorChange={changeNodeColor}
           onEmojiChange={changeNodeEmoji}
         />
