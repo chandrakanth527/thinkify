@@ -1,0 +1,129 @@
+{
+  "nodes": [
+    {
+      "id": "root",
+      "type": "mindmap",
+      "label": "My Mindmap",
+      "level": 0
+    },
+    {
+      "id": "topic1",
+      "type": "mindmap",
+      "label": "Ideas",
+      "level": 1
+    },
+    {
+      "id": "topic2",
+      "type": "mindmap",
+      "label": "Projects",
+      "level": 1
+    },
+    {
+      "id": "topic3",
+      "type": "mindmap",
+      "label": "Learning",
+      "level": 1
+    },
+    {
+      "id": "subtopic1-1",
+      "type": "mindmap",
+      "label": "Creative Ideas",
+      "level": 2
+    },
+    {
+      "id": "subtopic1-2",
+      "type": "mindmap",
+      "label": "Business Ideas",
+      "level": 2
+    },
+    {
+      "id": "subtopic2-1",
+      "type": "mindmap",
+      "label": "Web App",
+      "level": 2
+    },
+    {
+      "id": "subtopic2-2",
+      "type": "mindmap",
+      "label": "Mobile App",
+      "level": 2
+    },
+    {
+      "id": "subtopic3-1",
+      "type": "mindmap",
+      "label": "React",
+      "level": 2
+    },
+    {
+      "id": "subtopic3-2",
+      "type": "mindmap",
+      "label": "TypeScript",
+      "level": 2
+    }
+  ],
+  "edges": [
+    {
+      "id": "root-topic1",
+      "source": "root",
+      "target": "topic1",
+      "sourceHandle": "root#source#0",
+      "targetHandle": "topic1#target#0"
+    },
+    {
+      "id": "root-topic2",
+      "source": "root",
+      "target": "topic2",
+      "sourceHandle": "root#source#1",
+      "targetHandle": "topic2#target#0"
+    },
+    {
+      "id": "root-topic3",
+      "source": "root",
+      "target": "topic3",
+      "sourceHandle": "root#source#2",
+      "targetHandle": "topic3#target#0"
+    },
+    {
+      "id": "topic1-subtopic1-1",
+      "source": "topic1",
+      "target": "subtopic1-1",
+      "sourceHandle": "topic1#source#0",
+      "targetHandle": "subtopic1-1#target#0"
+    },
+    {
+      "id": "topic1-subtopic1-2",
+      "source": "topic1",
+      "target": "subtopic1-2",
+      "sourceHandle": "topic1#source#1",
+      "targetHandle": "subtopic1-2#target#0"
+    },
+    {
+      "id": "topic2-subtopic2-1",
+      "source": "topic2",
+      "target": "subtopic2-1",
+      "sourceHandle": "topic2#source#0",
+      "targetHandle": "subtopic2-1#target#0"
+    },
+    {
+      "id": "topic2-subtopic2-2",
+      "source": "topic2",
+      "target": "subtopic2-2",
+      "sourceHandle": "topic2#source#1",
+      "targetHandle": "subtopic2-2#target#0"
+    },
+    {
+      "id": "topic3-subtopic3-1",
+      "source": "topic3",
+      "target": "subtopic3-1",
+      "sourceHandle": "topic3#source#0",
+      "targetHandle": "subtopic3-1#target#0"
+    },
+    {
+      "id": "topic3-subtopic3-2",
+      "source": "topic3",
+      "target": "subtopic3-2",
+      "sourceHandle": "topic3#source#1",
+      "targetHandle": "subtopic3-2#target#0"
+    }
+  ]
+}

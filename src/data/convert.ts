@@ -63,8 +63,10 @@ export const workflow2reactflow = (workflow: Workflow): Reactflow => {
       ...node,
       data: {
         ...node,
-        sourceHandles: Object.keys(nodeHandles[node.id].sourceHandles) ?? [],
-        targetHandles: Object.keys(nodeHandles[node.id].targetHandles) ?? [],
+        sourceHandles:
+          Object.keys(nodeHandles[node.id]?.sourceHandles ?? {}) ?? [],
+        targetHandles:
+          Object.keys(nodeHandles[node.id]?.targetHandles ?? {}) ?? [],
       },
       position: { x: 0, y: 0 },
     })),

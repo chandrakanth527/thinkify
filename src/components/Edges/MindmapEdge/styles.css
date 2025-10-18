@@ -1,0 +1,9 @@
+.react-flow__edge.mindmap {
+  stroke: #b1b1b7;
+  stroke-width: 2px;
+}
+
+.react-flow__edge.mindmap:hover {
+  stroke: #555;
+  stroke-width: 3px;
+}

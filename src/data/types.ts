@@ -4,7 +4,9 @@ import type { ControlPoint } from '../layout/edge/point';
 
 interface WorkflowNode extends Record<string, unknown> {
   id: string;
-  type: 'base' | 'start';
+  type: 'base' | 'start' | 'mindmap';
+  label?: string;
+  level?: number;
 }
 
 interface WorkflowEdge {
@@ -89,10 +91,15 @@ export interface ReactflowEdgeData extends Record<string, unknown> {
 
 export type ReactflowBaseNode = Node<ReactflowNodeData, 'base'>;
 export type ReactflowStartNode = Node<ReactflowNodeData, 'start'>;
-export type ReactflowNodeWithData = ReactflowBaseNode | ReactflowStartNode;
+export type ReactflowMindmapNode = Node<ReactflowNodeData, 'mindmap'>;
+export type ReactflowNodeWithData =
+  | ReactflowBaseNode
+  | ReactflowStartNode
+  | ReactflowMindmapNode;
 
 export type ReactflowBaseEdge = Edge<ReactflowEdgeData, 'base'>;
-export type ReactflowEdgeWithData = ReactflowBaseEdge;
+export type ReactflowMindmapEdge = Edge<ReactflowEdgeData, 'mindmap'>;
+export type ReactflowEdgeWithData = ReactflowBaseEdge | ReactflowMindmapEdge;
 
 export interface Reactflow {
   nodes: ReactflowNodeWithData[];
