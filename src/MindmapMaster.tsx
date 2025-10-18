@@ -19,7 +19,7 @@ import {
   type EdgeChange,
   BackgroundVariant,
 } from '@xyflow/react';
-import { useCallback, useEffect, useState, useRef } from 'react';
+import { useCallback, useEffect, useState, useRef, type MouseEvent } from 'react';
 import dagre from '@dagrejs/dagre';
 
 // ==================== TYPES ====================
@@ -346,21 +346,30 @@ const MindmapMasterFlow = () => {
     edgesRef.current = edges;
   }, [edges]);
 
-  // Auto-layout on changes
+  const applyLayout = useCallback(
+    (nextNodes: MindmapNode[], nextEdges: MindmapEdge[]) => {
+      const layoutedNodes = getLayoutedElements(nextNodes, nextEdges);
+      nodesRef.current = layoutedNodes;
+      edgesRef.current = nextEdges;
+      setNodes(layoutedNodes);
+      setEdges(nextEdges);
+      requestAnimationFrame(() => fitView({ duration: 300, padding: 0.2 }));
+    },
+    [fitView, setNodes, setEdges],
+  );
+
   const relayout = useCallback(() => {
-    const layoutedNodes = getLayoutedElements(getNodes() as MindmapNode[], getEdges());
-    setNodes(layoutedNodes);
-    setTimeout(() => fitView({ duration: 300, padding: 0.2 }), 50);
-  }, [getNodes, getEdges, setNodes, fitView]);
+    applyLayout(nodesRef.current, edgesRef.current);
+  }, [applyLayout]);
 
   // Initial layout
   useEffect(() => {
-    relayout();
-  }, []);
+    applyLayout(initialNodes, []);
+  }, [applyLayout]);
 
   // Add child node
   const addChild = useCallback((parentId: string) => {
-    const parent = nodes.find(n => n.id === parentId);
+    const parent = nodesRef.current.find((n) => n.id === parentId);
     if (!parent) return;
 
     const newId = `node-${nodeIdCounter++}`;
@@ -386,20 +395,10 @@ const MindmapMasterFlow = () => {
     };
 
     // Calculate layout with the new node to get its correct position
-    const tempNodes = [...nodes, newNode];
-    const tempEdges = [...edges, newEdge];
-    const layoutedNodes = getLayoutedElements(tempNodes, tempEdges);
-
-    // Find the positioned new node
-    const positionedNewNode = layoutedNodes.find(n => n.id === newId);
-    if (positionedNewNode) {
-      newNode.position = positionedNewNode.position;
-    }
-
-    setNodes((nds) => [...nds, newNode]);
-    setEdges((eds) => [...eds, newEdge]);
-    setTimeout(relayout, 50);
-  }, [nodes, edges, setNodes, setEdges, relayout]);
+    const nextNodes = [...nodesRef.current, newNode];
+    const nextEdges = [...edgesRef.current, newEdge];
+    applyLayout(nextNodes, nextEdges);
+  }, [applyLayout]);
 
   // Delete node and descendants
   const deleteNode = useCallback((nodeId: string) => {
@@ -433,12 +432,8 @@ const MindmapMasterFlow = () => {
     );
 
     // Update states
-    setNodes(newNodes);
-    setEdges(newEdges);
-
-    // Trigger relayout after state is updated
-    setTimeout(relayout, 50);
-  }, [setNodes, setEdges, relayout]);
+    applyLayout(newNodes, newEdges);
+  }, [applyLayout]);
 
   // Update node label
   const updateNodeLabel = useCallback((id: string, label: string) => {
@@ -472,18 +467,9 @@ const MindmapMasterFlow = () => {
     };
 
     // Calculate layout with the new node to get its correct position
-    const tempNodes = [...nodes, newNode];
-    const layoutedNodes = getLayoutedElements(tempNodes, edges);
-
-    // Find the positioned new node
-    const positionedNewNode = layoutedNodes.find(n => n.id === newId);
-    if (positionedNewNode) {
-      newNode.position = positionedNewNode.position;
-    }
-
-    setNodes(nds => [...nds, newNode]);
-    setTimeout(relayout, 50);
-  }, [nodes, edges, setNodes, relayout]);
+    const nextNodes = [...nodesRef.current, newNode];
+    applyLayout(nextNodes, edgesRef.current);
+  }, [applyLayout]);
 
   // Export
   const exportData = useCallback(() => {
@@ -525,9 +511,7 @@ const MindmapMasterFlow = () => {
             type: 'default',
             style: { stroke: '#cbd5e1', strokeWidth: 2.5 },
           }));
-          setNodes(importedNodes);
-          setEdges(importedEdges);
-          setTimeout(relayout, 50);
+          applyLayout(importedNodes, importedEdges);
         } catch (err) {
           alert('Invalid file format');
         }
@@ -540,16 +524,15 @@ const MindmapMasterFlow = () => {
   // Clear all
   const clearAll = useCallback(() => {
     if (confirm('Clear all nodes? This cannot be undone.')) {
-      setNodes([{
+      const resetNodes: MindmapNode[] = [{
         id: 'root',
         type: 'mindmap',
         position: { x: 0, y: 0 },
         data: { label: 'My Mindmap', level: 0, color: COLORS[0].value },
-      }]);
-      setEdges([]);
-      setTimeout(relayout, 50);
+      }];
+      applyLayout(resetNodes, []);
     }
-  }, [setNodes, setEdges, relayout]);
+  }, [addChild, deleteNode, updateNodeLabel, selectedNodeId, nodes, applyLayout]);
 
   // Event listeners
   useEffect(() => {
@@ -573,7 +556,7 @@ const MindmapMasterFlow = () => {
       const isEditing = activeElement?.tagName === 'INPUT' || activeElement?.tagName === 'TEXTAREA';
 
       if ((e.key === 'Delete' || e.key === 'Backspace') && !isEditing && selectedNodeId) {
-        const nodeToDelete = nodes.find(n => n.id === selectedNodeId);
+        const nodeToDelete = nodesRef.current.find((n) => n.id === selectedNodeId);
         // Don't delete root nodes (level 0)
         if (nodeToDelete && nodeToDelete.data.level > 0) {
           e.preventDefault();
@@ -594,7 +577,7 @@ const MindmapMasterFlow = () => {
       window.removeEventListener('update-node-label', handleUpdateLabel);
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [addChild, deleteNode, updateNodeLabel, selectedNodeId, nodes]);
+  }, [addChild, deleteNode, updateNodeLabel, selectedNodeId]);
 
   // Track selection
   const handleNodesChange = useCallback((changes: NodeChange[]) => {
