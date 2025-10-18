@@ -69,11 +69,41 @@ const COLORS = [
 
 const EMOJIS = ['💡', '⭐', '🎯', '🚀', '💎', '🔥', '✨', '🎨', '📌', '🏆'];
 
+// Zoom configuration
+const ZOOM_LIMITS = {
+  min: 0.1,
+  max: 2.0,
+  comfortable: {
+    min: 0.4,
+    max: 1.2,
+  },
+  autoAdjust: {
+    threshold: 0.3,
+    targetPadding: 0.15,
+  },
+};
+
+const ZOOM_DURATIONS = {
+  initial: 300,
+  addNode: 400,
+  expand: 500,
+  collapse: 300,
+  selection: 350,
+  autoLayout: 600,
+  delete: 300,
+  undo: 400,
+};
+
 let nodeIdCounter = 100;
 
 interface Snapshot {
   nodes: MindmapNode[];
   edges: MindmapEdge[];
+  viewport?: {
+    x: number;
+    y: number;
+    zoom: number;
+  };
 }
 
 interface CollapseInfo {
@@ -703,10 +733,12 @@ const MindmapMasterFlow = () => {
 
   const pushHistory = useCallback(
     (nodesSnapshot: MindmapNode[], edgesSnapshot: MindmapEdge[]) => {
+      const [x, y, zoom] = transformRef.current;
       const trimmed = historyRef.current.slice(0, historyIndexRef.current + 1);
       trimmed.push({
         nodes: cloneNodesForHistory(nodesSnapshot),
         edges: cloneEdgesForHistory(edgesSnapshot),
+        viewport: { x, y, zoom },
       });
       historyRef.current = trimmed;
       historyIndexRef.current = trimmed.length - 1;
@@ -725,9 +757,20 @@ const MindmapMasterFlow = () => {
       edgesRef.current = finalEdges;
       setNodes(finalNodes);
       setEdges(finalEdges);
+
+      // Restore viewport state if available
+      if (snapshot.viewport) {
+        requestAnimationFrame(() => {
+          setCenter(snapshot.viewport!.x, snapshot.viewport!.y, {
+            zoom: snapshot.viewport!.zoom,
+            duration: ZOOM_DURATIONS.undo,
+          });
+        });
+      }
+
       isRestoringRef.current = false;
     },
-    [setEdges, setNodes],
+    [setEdges, setNodes, setCenter],
   );
 
   const updateGraph = useCallback(
@@ -794,10 +837,19 @@ const MindmapMasterFlow = () => {
       nodes: [...currentNodes],
       edges: [...currentEdges],
     }));
-  }, [updateGraph]);
+
+    // After relayout, fit all visible nodes
+    requestAnimationFrame(() => {
+      fitView({
+        padding: 0.25,
+        duration: ZOOM_DURATIONS.autoLayout,
+        maxZoom: ZOOM_LIMITS.comfortable.max,
+      });
+    });
+  }, [updateGraph, fitView]);
 
   const focusNodes = useCallback(
-    (nodeIds: string[]) => {
+    (nodeIds: string[], options?: { zoomToFit?: boolean; duration?: number; padding?: number }) => {
       const targets = nodesRef.current.filter((n) => nodeIds.includes(n.id));
       if (targets.length === 0) {
         return;
@@ -820,11 +872,38 @@ const MindmapMasterFlow = () => {
 
       const centerX = (minX + maxX) / 2;
       const centerY = (minY + maxY) / 2;
-      const [, , zoom] = transformRef.current;
+      const [, , currentZoom] = transformRef.current;
+
+      let targetZoom = currentZoom;
+
+      if (options?.zoomToFit) {
+        // Calculate optimal zoom to fit the nodes
+        const width = maxX - minX;
+        const height = maxY - minY;
+        const padding = options.padding ?? ZOOM_LIMITS.autoAdjust.targetPadding;
+
+        // Assume viewport is roughly 1200x800 (will be more precise with actual viewport)
+        const viewportWidth = window.innerWidth;
+        const viewportHeight = window.innerHeight;
+
+        const zoomX = (viewportWidth * (1 - padding * 2)) / width;
+        const zoomY = (viewportHeight * (1 - padding * 2)) / height;
+
+        targetZoom = Math.min(zoomX, zoomY);
+        targetZoom = Math.max(ZOOM_LIMITS.min, Math.min(ZOOM_LIMITS.max, targetZoom));
+
+        // Prefer comfortable zoom range
+        if (targetZoom > ZOOM_LIMITS.comfortable.max) {
+          targetZoom = ZOOM_LIMITS.comfortable.max;
+        }
+      } else if (currentZoom < ZOOM_LIMITS.comfortable.min) {
+        // If too zoomed out, zoom in to comfortable level
+        targetZoom = ZOOM_LIMITS.comfortable.min * 1.5;
+      }
 
       setCenter(centerX, centerY, {
-        zoom,
-        duration: 250,
+        zoom: targetZoom,
+        duration: options?.duration ?? 250,
       });
     },
     [setCenter],
@@ -861,7 +940,7 @@ const MindmapMasterFlow = () => {
     }));
 
     const timeout = setTimeout(() => {
-      fitView({ padding: 0.25, duration: 300 });
+      fitView({ padding: 0.2, duration: ZOOM_DURATIONS.initial, maxZoom: ZOOM_LIMITS.comfortable.max });
     }, 0);
 
     return () => clearTimeout(timeout);
@@ -906,7 +985,12 @@ const MindmapMasterFlow = () => {
       });
 
       requestAnimationFrame(() => {
-        focusNodes([parentId, newId]);
+        // Smart zoom: fit to show both parent and new child with some padding
+        focusNodes([parentId, newId], {
+          zoomToFit: true,
+          duration: ZOOM_DURATIONS.addNode,
+          padding: 0.2,
+        });
       });
     },
     [focusNodes, updateGraph],
@@ -915,6 +999,10 @@ const MindmapMasterFlow = () => {
   // Delete node and descendants
   const deleteNode = useCallback(
     (nodeId: string) => {
+      // Find parent before deletion
+      const parentEdge = edgesRef.current.find((e) => e.target === nodeId);
+      const parentId = parentEdge?.source;
+
       updateGraph((currentNodes, currentEdges) => {
         const childrenMap = new Map<string, string[]>();
         currentEdges.forEach((edge) => {
@@ -943,8 +1031,15 @@ const MindmapMasterFlow = () => {
           edges: filteredEdges,
         };
       });
+
+      // Focus on parent if exists
+      if (parentId) {
+        requestAnimationFrame(() => {
+          focusNodes([parentId], { duration: ZOOM_DURATIONS.delete });
+        });
+      }
     },
-    [updateGraph],
+    [updateGraph, focusNodes],
   );
 
   // Update node label
@@ -1030,7 +1125,38 @@ const MindmapMasterFlow = () => {
       }));
 
       requestAnimationFrame(() => {
-        focusNodes([nodeId]);
+        if (collapsed) {
+          // Collapsing: just center on the node, keep zoom
+          focusNodes([nodeId], { duration: ZOOM_DURATIONS.collapse });
+        } else {
+          // Expanding: zoom to fit the revealed subtree
+          // Get all children of this node
+          const childrenMap = new Map<string, string[]>();
+          edgesRef.current.forEach((edge) => {
+            if (!childrenMap.has(edge.source)) {
+              childrenMap.set(edge.source, []);
+            }
+            childrenMap.get(edge.source)!.push(edge.target);
+          });
+
+          const getDescendants = (id: string): string[] => {
+            const children = childrenMap.get(id) || [];
+            const descendants = [...children];
+            children.forEach((childId) => {
+              descendants.push(...getDescendants(childId));
+            });
+            return descendants;
+          };
+
+          const descendants = getDescendants(nodeId);
+          const nodesToFocus = [nodeId, ...descendants];
+
+          focusNodes(nodesToFocus, {
+            zoomToFit: true,
+            duration: ZOOM_DURATIONS.expand,
+            padding: 0.15,
+          });
+        }
       });
     },
     [focusNodes, updateGraph],
@@ -1189,9 +1315,19 @@ const MindmapMasterFlow = () => {
     onNodesChange(changes);
     const selectChange = changes.find(c => c.type === 'select');
     if (selectChange && 'selected' in selectChange) {
-      setSelectedNodeId(selectChange.selected ? selectChange.id : null);
+      const nodeId = selectChange.selected ? selectChange.id : null;
+      setSelectedNodeId(nodeId);
+
+      // Smart zoom on selection
+      if (nodeId && selectChange.selected) {
+        requestAnimationFrame(() => {
+          focusNodes([nodeId], {
+            duration: ZOOM_DURATIONS.selection,
+          });
+        });
+      }
     }
-  }, [onNodesChange]);
+  }, [onNodesChange, focusNodes]);
 
   const selectedNode = selectedNodeId ? nodes.find(n => n.id === selectedNodeId) : null;
 
