@@ -40,13 +40,17 @@ import {
 
 // ==================== TYPES ====================
 
-interface MindmapNodeData {
+interface MindmapNodeData extends Record<string, unknown> {
   label: string;
   level: number;
   color?: string;
   emoji?: string;
   collapsed?: boolean;
   hiddenChildCount?: number;
+
+  // AI Planning fields
+  description?: string;
+  status?: 'not-started' | 'in-progress' | 'completed' | 'blocked';
 }
 
 type MindmapNode = Node<MindmapNodeData, 'mindmap'>;
@@ -111,14 +115,18 @@ interface CollapseInfo {
   hiddenChildCount: Map<string, number>;
 }
 
-const cloneNodeForHistory = (node: MindmapNode): MindmapNode => ({
-  ...node,
-  data: { ...node.data },
-  position: node.position ? { ...node.position } : node.position,
-  positionAbsolute: node.positionAbsolute ? { ...node.positionAbsolute } : undefined,
-  style: node.style ? { ...node.style } : undefined,
-  measured: node.measured ? { ...node.measured } : undefined,
-});
+const cloneNodeForHistory = (node: MindmapNode): MindmapNode => {
+  const cloned: MindmapNode = {
+    ...node,
+    data: { ...node.data },
+    position: node.position ? { ...node.position } : node.position,
+  };
+
+  if (node.style) cloned.style = { ...node.style };
+  if (node.measured) cloned.measured = { ...node.measured };
+
+  return cloned;
+};
 
 const cloneNodesForHistory = (nodes: MindmapNode[]): MindmapNode[] => nodes.map(cloneNodeForHistory);
 
@@ -281,7 +289,6 @@ const getLayoutedElements = (nodes: MindmapNode[], edges: MindmapEdge[]) => {
   });
 
   const layoutedNodes: MindmapNode[] = [];
-  const startX = 100;
   const horizontalSpacing = 400;
   const verticalSpacing = 120;
 
@@ -326,10 +333,15 @@ const getLayoutedElements = (nodes: MindmapNode[], edges: MindmapEdge[]) => {
     return parentY;
   };
 
-  // Layout each root separately
-  rootNodes.forEach((root, index) => {
+  // Layout each root separately, preserving root positions
+  rootNodes.forEach((root) => {
     currentY = 0;
-    positionNode(root, startX, index * 500);
+    // Use the root's existing position instead of calculating a new one
+    const rootX = root.position.x;
+    const rootY = root.position.y;
+
+    // Position the tree, but we'll adjust to keep root at its current position
+    positionNode(root, rootX, rootY);
   });
 
   return layoutedNodes;
@@ -339,8 +351,15 @@ const getLayoutedElements = (nodes: MindmapNode[], edges: MindmapEdge[]) => {
 
 const MindmapNodeComponent = ({ data, id, selected }: any) => {
   const [isEditing, setIsEditing] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [isEditingDescription, setIsEditingDescription] = useState(false);
+  const [isEditingStatus, setIsEditingStatus] = useState(false);
   const [label, setLabel] = useState(data.label);
+  const [description, setDescription] = useState(data.description || '');
+  const [status, setStatus] = useState(data.status || 'not-started');
   const inputRef = useRef<HTMLInputElement>(null);
+  const descriptionRef = useRef<HTMLTextAreaElement>(null);
+  const nodeRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (isEditing && inputRef.current) {
@@ -348,6 +367,45 @@ const MindmapNodeComponent = ({ data, id, selected }: any) => {
       inputRef.current.select();
     }
   }, [isEditing]);
+
+  useEffect(() => {
+    if (isEditingDescription && descriptionRef.current) {
+      descriptionRef.current.focus();
+      descriptionRef.current.select();
+    }
+  }, [isEditingDescription]);
+
+  // Handle click outside to collapse
+  useEffect(() => {
+    if (!isExpanded) return;
+
+    const handleClickOutside = (e: MouseEvent) => {
+      // Don't close if clicking on input/textarea or if actively editing
+      if (isEditing || isEditingDescription || isEditingStatus) {
+        return;
+      }
+
+      const target = e.target as HTMLElement;
+      if (nodeRef.current && !nodeRef.current.contains(target)) {
+        setIsExpanded(false);
+      }
+    };
+
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !isEditing && !isEditingDescription && !isEditingStatus) {
+        setIsExpanded(false);
+      }
+    };
+
+    // Use capture phase to ensure we get the event before ReactFlow
+    document.addEventListener('mousedown', handleClickOutside, true);
+    document.addEventListener('keydown', handleEscape);
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside, true);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [isExpanded, isEditing, isEditingDescription, isEditingStatus]);
 
   const handleDoubleClick = () => setIsEditing(true);
 
@@ -362,6 +420,21 @@ const MindmapNodeComponent = ({ data, id, selected }: any) => {
     }
   };
 
+  const handleDescriptionBlur = () => {
+    setIsEditingDescription(false);
+    window.dispatchEvent(new CustomEvent('update-node-description', {
+      detail: { id, description: description.trim() }
+    }));
+  };
+
+  const handleStatusChange = (newStatus: string) => {
+    setStatus(newStatus);
+    setIsEditingStatus(false);
+    window.dispatchEvent(new CustomEvent('update-node-status', {
+      detail: { id, status: newStatus }
+    }));
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
       handleBlur();
@@ -371,11 +444,37 @@ const MindmapNodeComponent = ({ data, id, selected }: any) => {
     }
   };
 
+  const handleDescriptionKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      setDescription(data.description || '');
+      setIsEditingDescription(false);
+    }
+    // Allow Ctrl/Cmd+Enter to save
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+      handleDescriptionBlur();
+    }
+  };
+
   const nodeClass = `mindmap-master-node level-${data.level}`;
-  const style = data.color ? { background: data.color } : {};
+
+  // Status indicator mapping with colors
+  const statusConfig = {
+    'not-started': { icon: '○', label: 'Not Started', color: '#94a3b8', bg: '#f1f5f9' },
+    'in-progress': { icon: '◐', label: 'In Progress', color: '#3b82f6', bg: '#dbeafe' },
+    'completed': { icon: '●', label: 'Completed', color: '#10b981', bg: '#d1fae5' },
+    'blocked': { icon: '✕', label: 'Blocked', color: '#ef4444', bg: '#fee2e2' },
+  };
+
+  const currentStatus = data.status ? statusConfig[data.status as keyof typeof statusConfig] : null;
+
+  // Status only affects left border, background is for categorization
+  const style: React.CSSProperties = {
+    ...(data.color ? { background: data.color } : {}),
+    ...(currentStatus ? { borderLeft: `3px solid ${currentStatus.color}` } : {}),
+  };
 
   return (
-    <div className={`${nodeClass} ${selected ? 'selected' : ''}`} style={style}>
+    <div ref={nodeRef} className={`${nodeClass} ${selected ? 'selected' : ''}`} style={style}>
       {/* ReactFlow Handles */}
       <Handle
         type="target"
@@ -391,22 +490,165 @@ const MindmapNodeComponent = ({ data, id, selected }: any) => {
       />
 
       <div className="node-content">
-        {data.emoji && <span className="node-emoji">{data.emoji}</span>}
-        {isEditing ? (
-          <input
-            ref={inputRef}
-            type="text"
-            value={label}
-            onChange={(e) => setLabel(e.target.value)}
-            onBlur={handleBlur}
-            onKeyDown={handleKeyDown}
-            className="node-input"
-          />
-        ) : (
-          <div className="node-label" onDoubleClick={handleDoubleClick}>
-            {label}
+        {/* Compact view - entire area clickable to expand */}
+        {!isExpanded && !isEditing && (
+          <div
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsExpanded(true);
+            }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              cursor: 'pointer',
+            }}
+            title="Click to expand details"
+          >
+            {/* Title only */}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              {data.emoji && <span className="node-emoji">{data.emoji}</span>}
+              <div
+                className="node-label"
+                onDoubleClick={handleDoubleClick}
+                style={{
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  color: '#1a1a1a',
+                  lineHeight: '1.3',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap'
+                }}
+              >
+                {label}
+              </div>
+            </div>
+
+            {/* Expand hint if has description */}
+            {data.description && (
+              <div
+                style={{
+                  fontSize: '10px',
+                  color: '#94a3b8',
+                  lineHeight: '1'
+                }}
+              >
+                ⋯
+              </div>
+            )}
           </div>
         )}
+
+        {/* Expanded view */}
+        {isExpanded && (
+          <div style={{ maxWidth: '320px', minWidth: '200px' }}>
+            {/* Close button */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '8px' }}>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsExpanded(false);
+                }}
+                style={{
+                  fontSize: '16px',
+                  color: '#94a3b8',
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: 0,
+                  lineHeight: '1'
+                }}
+                title="Close (or click outside)"
+                type="button"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Title - editable on double click */}
+            <div style={{ marginBottom: '10px' }}>
+              {!isEditing ? (
+                <div
+                  onDoubleClick={(e) => {
+                    e.stopPropagation();
+                    setIsEditing(true);
+                  }}
+                  style={{
+                    fontSize: '14px',
+                    fontWeight: 600,
+                    color: '#1a1a1a',
+                    lineHeight: '1.4',
+                    wordBreak: 'break-word',
+                    padding: '2px 0'
+                  }}
+                  title="Double-click to edit title"
+                >
+                  {label}
+                </div>
+              ) : (
+                <input
+                  ref={inputRef}
+                  type="text"
+                  value={label}
+                  onChange={(e) => setLabel(e.target.value)}
+                  onBlur={handleBlur}
+                  onKeyDown={handleKeyDown}
+                  onClick={(e) => e.stopPropagation()}
+                  className="node-input"
+                  style={{ width: '100%', fontSize: '14px', fontWeight: 600 }}
+                />
+              )}
+            </div>
+
+            {/* Description - editable on double click */}
+            <div>
+              {!isEditingDescription ? (
+                <div
+                  onDoubleClick={(e) => {
+                    e.stopPropagation();
+                    setIsEditingDescription(true);
+                  }}
+                  style={{
+                    fontSize: '12px',
+                    color: description ? '#64748b' : '#cbd5e1',
+                    lineHeight: '1.5',
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word',
+                    padding: '4px',
+                    borderRadius: '4px',
+                    minHeight: '40px'
+                  }}
+                  title="Double-click to edit description"
+                >
+                  {description || 'Double-click to add description...'}
+                </div>
+              ) : (
+                <textarea
+                  ref={descriptionRef}
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  onBlur={handleDescriptionBlur}
+                  onKeyDown={handleDescriptionKeyDown}
+                  onClick={(e) => e.stopPropagation()}
+                  placeholder="Add description... (Ctrl+Enter to save)"
+                  style={{
+                    width: '100%',
+                    minHeight: '60px',
+                    fontSize: '12px',
+                    padding: '6px',
+                    border: '1px solid #cbd5e1',
+                    borderRadius: '4px',
+                    fontFamily: 'inherit',
+                    resize: 'vertical',
+                    lineHeight: '1.5'
+                  }}
+                />
+              )}
+            </div>
+          </div>
+        )}
+
       </div>
 
       <button
@@ -523,6 +765,7 @@ interface NodeActionToolbarProps {
   onColorChange: (color: string) => void;
   onEmojiChange: (emoji: string) => void;
   onToggleCollapse: (nodeId: string, collapsed: boolean) => void;
+  onStatusChange: (nodeId: string, status: string) => void;
 }
 
 const NodeActionToolbar = ({
@@ -532,23 +775,29 @@ const NodeActionToolbar = ({
   onColorChange,
   onEmojiChange,
   onToggleCollapse,
+  onStatusChange,
 }: NodeActionToolbarProps) => {
   const [showColors, setShowColors] = useState(false);
   const [showEmojis, setShowEmojis] = useState(false);
+  const [showStatus, setShowStatus] = useState(false);
   const transform = useStore((state) => state.transform);
 
   useEffect(() => {
     setShowColors(false);
     setShowEmojis(false);
+    setShowStatus(false);
   }, [node?.id]);
 
   const [viewportX, viewportY, zoom] = transform;
+
+  // Force recalculation on every render when node is selected
+  // This ensures toolbar position updates during zoom/pan animations
   const anchorStyle = useMemo(() => {
     if (!node) {
       return null;
     }
 
-    const position = node.positionAbsolute ?? node.position;
+    const position = (node as any).positionAbsolute ?? node.position;
     const baseWidth = node.measured?.width ?? node.width ?? 160;
     const baseHeight = node.measured?.height ?? node.height ?? 60;
 
@@ -557,7 +806,7 @@ const NodeActionToolbar = ({
       top: viewportY + (position?.y ?? 0) * zoom,
       '--toolbar-offset': `${(baseHeight + 16) * zoom}px`,
     } as CSSProperties;
-  }, [node, viewportX, viewportY, zoom]);
+  }, [node, node?.position, node?.measured, viewportX, viewportY, zoom]);
 
   if (!node || !anchorStyle) {
     return null;
@@ -661,14 +910,62 @@ const NodeActionToolbar = ({
 
         <div className="floating-divider" />
 
-        <button
-          className="icon-btn ghost"
-          title="More actions coming soon"
-          type="button"
-          disabled
-        >
-          <IconMagicWand size={18} />
-        </button>
+        {/* Status dropdown */}
+        <div className="floating-group">
+          <button
+            className="icon-btn"
+            onClick={() => setShowStatus((prev) => !prev)}
+            title="Change status"
+            type="button"
+            aria-expanded={showStatus}
+            style={{
+              fontSize: '14px',
+              fontWeight: 'bold'
+            }}
+          >
+            {node.data.status ?
+              ({'not-started': '○', 'in-progress': '◐', 'completed': '●', 'blocked': '✕'}[node.data.status] || '○')
+              : '○'}
+          </button>
+          {showStatus && (
+            <div className="floating-popover" style={{ minWidth: '140px' }}>
+              {[
+                { key: 'not-started', icon: '○', label: 'Not Started', color: '#94a3b8' },
+                { key: 'in-progress', icon: '◐', label: 'In Progress', color: '#3b82f6' },
+                { key: 'completed', icon: '●', label: 'Completed', color: '#10b981' },
+                { key: 'blocked', icon: '✕', label: 'Blocked', color: '#ef4444' },
+              ].map((statusOption) => (
+                <button
+                  key={statusOption.key}
+                  className="status-option"
+                  onClick={() => {
+                    onStatusChange(node.id, statusOption.key);
+                    setShowStatus(false);
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    padding: '8px 12px',
+                    width: '100%',
+                    background: node.data.status === statusOption.key ? '#f0f0f0' : 'transparent',
+                    border: 'none',
+                    textAlign: 'left',
+                    cursor: 'pointer',
+                    fontSize: '12px',
+                    fontWeight: 500,
+                  }}
+                  type="button"
+                >
+                  <span style={{ fontSize: '14px', fontWeight: 'bold', color: statusOption.color }}>
+                    {statusOption.icon}
+                  </span>
+                  <span>{statusOption.label}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
 
         <div className="floating-divider" />
 
@@ -693,7 +990,14 @@ const MindmapMasterFlow = () => {
       id: 'root',
       type: 'mindmap',
       position: { x: 0, y: 0 },
-      data: { label: 'My Mindmap', level: 0, color: COLORS[0].value },
+      data: {
+        label: 'My Mindmap',
+        level: 0,
+        color: COLORS[0].value,
+        // AI Planning fields example
+        status: 'in-progress',
+        description: 'Build an AI-powered mindmap tool for structured problem-solving. This tool will help break down complex tasks into manageable pieces and track progress.',
+      },
     },
   ];
 
@@ -861,7 +1165,7 @@ const MindmapMasterFlow = () => {
       let maxY = Number.NEGATIVE_INFINITY;
 
       targets.forEach((node) => {
-        const position = node.positionAbsolute ?? node.position ?? { x: 0, y: 0 };
+        const position = (node as any).positionAbsolute ?? node.position ?? { x: 0, y: 0 };
         const width = node.measured?.width ?? node.width ?? 160;
         const height = node.measured?.height ?? node.height ?? 60;
         minX = Math.min(minX, position.x);
@@ -965,6 +1269,8 @@ const MindmapMasterFlow = () => {
             label: 'New Topic',
             level: parent.data.level + 1,
             color: COLORS[(parent.data.level + 1) % COLORS.length].value,
+            status: 'not-started',
+            description: '',
           },
         };
 
@@ -1053,6 +1359,48 @@ const MindmapMasterFlow = () => {
                 data: {
                   ...n.data,
                   label,
+                },
+              }
+            : n,
+        ),
+        edges: edgesState,
+      }));
+    },
+    [updateGraph],
+  );
+
+  // Update node description
+  const updateNodeDescription = useCallback(
+    (id: string, description: string) => {
+      updateGraph((nodesState, edgesState) => ({
+        nodes: nodesState.map((n) =>
+          n.id === id
+            ? {
+                ...n,
+                data: {
+                  ...n.data,
+                  description,
+                },
+              }
+            : n,
+        ),
+        edges: edgesState,
+      }));
+    },
+    [updateGraph],
+  );
+
+  // Update node status
+  const updateNodeStatus = useCallback(
+    (id: string, status: string) => {
+      updateGraph((nodesState, edgesState) => ({
+        nodes: nodesState.map((n) =>
+          n.id === id
+            ? {
+                ...n,
+                data: {
+                  ...n.data,
+                  status,
                 },
               }
             : n,
@@ -1164,13 +1512,28 @@ const MindmapMasterFlow = () => {
 
   // Add root node
   const addRootNode = useCallback(() => {
+    // Get current viewport center
+    const [x, y, zoom] = transformRef.current;
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+
+    // Calculate the center point in flow coordinates
+    const centerX = (viewportWidth / 2 - x) / zoom;
+    const centerY = (viewportHeight / 2 - y) / zoom;
+
     updateGraph((currentNodes, currentEdges) => {
       const newId = `root-${nodeIdCounter++}`;
       const newNode: MindmapNode = {
         id: newId,
         type: 'mindmap',
-        position: { x: 0, y: 0 },
-        data: { label: 'New Root', level: 0, color: COLORS[0].value },
+        position: { x: centerX, y: centerY },
+        data: {
+          label: 'New Root',
+          level: 0,
+          color: COLORS[0].value,
+          status: 'not-started',
+          description: '',
+        },
       };
 
       return {
@@ -1261,6 +1624,14 @@ const MindmapMasterFlow = () => {
       const { id, label } = (e as CustomEvent).detail;
       updateNodeLabel(id, label);
     };
+    const handleUpdateDescription = (e: Event) => {
+      const { id, description } = (e as CustomEvent).detail;
+      updateNodeDescription(id, description);
+    };
+    const handleUpdateStatus = (e: Event) => {
+      const { id, status } = (e as CustomEvent).detail;
+      updateNodeStatus(id, status);
+    };
 
     // Handle keyboard shortcuts
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -1300,19 +1671,78 @@ const MindmapMasterFlow = () => {
     window.addEventListener('add-child', handleAddChild);
     window.addEventListener('delete-node', handleDeleteNode);
     window.addEventListener('update-node-label', handleUpdateLabel);
+    window.addEventListener('update-node-description', handleUpdateDescription);
+    window.addEventListener('update-node-status', handleUpdateStatus);
     window.addEventListener('keydown', handleKeyDown);
 
     return () => {
       window.removeEventListener('add-child', handleAddChild);
       window.removeEventListener('delete-node', handleDeleteNode);
       window.removeEventListener('update-node-label', handleUpdateLabel);
+      window.removeEventListener('update-node-description', handleUpdateDescription);
+      window.removeEventListener('update-node-status', handleUpdateStatus);
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [addChild, deleteNode, updateNodeLabel, redo, selectedNodeId, undo]);
+  }, [addChild, deleteNode, updateNodeLabel, updateNodeDescription, updateNodeStatus, redo, selectedNodeId, undo]);
 
-  // Track selection
+  // Track selection and handle root node dragging
   const handleNodesChange = useCallback((changes: NodeChange[]) => {
-    onNodesChange(changes);
+    // Check if this is a root node being dragged
+    const positionChange = changes.find(c => c.type === 'position' && 'dragging' in c && c.dragging);
+
+    if (positionChange && 'position' in positionChange && positionChange.position) {
+      const draggedNode = nodesRef.current.find(n => n.id === positionChange.id);
+
+      // If dragging a root node (level 0), move only its tree (root + descendants)
+      if (draggedNode && draggedNode.data.level === 0) {
+        const oldPosition = draggedNode.position;
+        const newPosition = positionChange.position;
+        const deltaX = newPosition.x - oldPosition.x;
+        const deltaY = newPosition.y - oldPosition.y;
+
+        // Build children map to find descendants
+        const childrenMap = new Map<string, string[]>();
+        edgesRef.current.forEach(edge => {
+          if (!childrenMap.has(edge.source)) {
+            childrenMap.set(edge.source, []);
+          }
+          childrenMap.get(edge.source)!.push(edge.target);
+        });
+
+        // Get all descendants of this root node
+        const getDescendants = (nodeId: string): Set<string> => {
+          const descendants = new Set<string>();
+          const children = childrenMap.get(nodeId) || [];
+          children.forEach(childId => {
+            descendants.add(childId);
+            const childDescendants = getDescendants(childId);
+            childDescendants.forEach(desc => descendants.add(desc));
+          });
+          return descendants;
+        };
+
+        const treeNodeIds = new Set<string>([draggedNode.id, ...getDescendants(draggedNode.id)]);
+
+        // Apply delta only to nodes in this tree
+        const modifiedChanges: NodeChange<MindmapNode>[] = nodesRef.current
+          .filter(node => treeNodeIds.has(node.id))
+          .map(node => ({
+            type: 'position' as const,
+            id: node.id,
+            position: {
+              x: node.position.x + deltaX,
+              y: node.position.y + deltaY,
+            },
+            dragging: positionChange.id === node.id,
+          }));
+
+        onNodesChange(modifiedChanges as NodeChange<MindmapNode>[] as NodeChange[]);
+        return;
+      }
+    }
+
+    onNodesChange(changes as NodeChange<MindmapNode>[] as NodeChange[]);
+
     const selectChange = changes.find(c => c.type === 'select');
     if (selectChange && 'selected' in selectChange) {
       const nodeId = selectChange.selected ? selectChange.id : null;
@@ -1329,7 +1759,7 @@ const MindmapMasterFlow = () => {
     }
   }, [onNodesChange, focusNodes]);
 
-  const selectedNode = selectedNodeId ? nodes.find(n => n.id === selectedNodeId) : null;
+  const selectedNode = selectedNodeId ? nodes.find(n => n.id === selectedNodeId) ?? null : null;
 
   return (
     <div style={{ width: '100vw', height: '100vh' }}>
