@@ -10,6 +10,7 @@ import {
   MiniMap,
   type Node,
   type NodeChange,
+  type OnSelectionChangeParams,
   Panel,
   Position,
   ReactFlow,
@@ -30,10 +31,18 @@ import {
 } from 'react';
 
 import {
+  AIChatPanel,
+  type AIChatPanelNodeSummary,
+  type AIChatPanelPhase,
+  type AIChatPanelMessage,
+  type AIChatPanelQuickAction,
+} from '@/components/AIChatPanel';
+import {
   IconCollapse,
   IconDownload,
   IconExpand,
   IconLayout,
+  IconMagicWand,
   IconMore,
   IconPalette,
   IconPlus,
@@ -115,6 +124,73 @@ type StatusValue = (typeof STATUS_OPTIONS)[number]['value'];
 const normalizeStatus = (value?: MindmapNodeData['status']): StatusValue =>
   (STATUS_OPTIONS.find((option) => option.value === value)?.value ??
     'not-started') as StatusValue;
+
+const FLOW_STORAGE_KEY = 'mindmap-flow-state.v1';
+const AI_CONVERSATION_STORAGE_KEY = 'mindmap-ai-conversations.v1';
+
+const AI_QUICK_ACTIONS: AIChatPanelQuickAction[] = [
+  {
+    id: 'children',
+    label: 'Generate child nodes',
+    description:
+      'Let the AI brainstorm a handful of sibling ideas to add underneath this topic.',
+  },
+  {
+    id: 'expand',
+    label: 'Expand into outline',
+    description:
+      'Ask for a deeper structure that stretches one or two levels further down.',
+  },
+  {
+    id: 'replace',
+    label: 'Replace existing children',
+    description:
+      'Swap the current children with a fresh batch of AI-generated suggestions.',
+  },
+];
+
+interface StoredAIMessage extends AIChatPanelMessage {
+  kind?: 'manual' | 'quick';
+}
+
+const createMessageId = (prefix: string) =>
+  `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+
+interface StoredFlowState {
+  nodes: MindmapNode[];
+  edges: MindmapEdge[];
+  viewport?: {
+    x: number;
+    y: number;
+    zoom: number;
+  };
+}
+
+const serializeNodesForStorage = (entries: MindmapNode[]) =>
+  entries.map((entry) => ({
+    id: entry.id,
+    type: entry.type,
+    position: entry.position,
+    positionAbsolute: entry.positionAbsolute,
+    data: entry.data,
+    style: entry.style,
+    width: entry.width,
+    height: entry.height,
+    measured: entry.measured,
+  }));
+
+const serializeEdgesForStorage = (entries: MindmapEdge[]) =>
+  entries.map((entry) => ({
+    id: entry.id,
+    source: entry.source,
+    target: entry.target,
+    sourceHandle: entry.sourceHandle,
+    targetHandle: entry.targetHandle,
+    type: entry.type,
+    data: entry.data,
+    style: entry.style,
+    animated: entry.animated,
+  }));
 
 // Zoom configuration
 const ZOOM_LIMITS = {
@@ -364,6 +440,7 @@ const getLayoutedElements = (nodes: MindmapNode[], edges: MindmapEdge[]) => {
   });
 
   const layoutedNodes: MindmapNode[] = [];
+  const visited = new Set<string>();
   const horizontalSpacing = 420;
   const verticalSpacing = 120;
 
@@ -385,16 +462,30 @@ const getLayoutedElements = (nodes: MindmapNode[], edges: MindmapEdge[]) => {
     x: number,
     yStart: number,
   ): number => {
+    if (visited.has(node.id)) {
+      // Prevent infinite recursion in case of malformed graphs
+      const existing = layoutedNodes.find((entry) => entry.id === node.id);
+      return existing?.position?.y ?? yStart;
+    }
+    visited.add(node.id);
+
     const children = childrenMap.get(node.id) || [];
 
     if (children.length === 0) {
       // Leaf node
-      layoutedNodes.push({
+      const leafY = yStart + currentY * verticalSpacing;
+      const existingIndex = layoutedNodes.findIndex((entry) => entry.id === node.id);
+      const nextNode: MindmapNode = {
         ...node,
-        position: { x, y: yStart + currentY * verticalSpacing },
-      });
+        position: { x, y: leafY },
+      };
+      if (existingIndex >= 0) {
+        layoutedNodes[existingIndex] = nextNode;
+      } else {
+        layoutedNodes.push(nextNode);
+      }
       currentY += 1;
-      return yStart + (currentY - 1) * verticalSpacing;
+      return leafY;
     }
 
     // Position children first
@@ -408,10 +499,16 @@ const getLayoutedElements = (nodes: MindmapNode[], edges: MindmapEdge[]) => {
     const parentY =
       (childYPositions[0] + childYPositions[childYPositions.length - 1]) / 2;
 
-    layoutedNodes.push({
+    const existingIndex = layoutedNodes.findIndex((entry) => entry.id === node.id);
+    const nextNode: MindmapNode = {
       ...node,
       position: { x, y: parentY },
-    });
+    };
+    if (existingIndex >= 0) {
+      layoutedNodes[existingIndex] = nextNode;
+    } else {
+      layoutedNodes.push(nextNode);
+    }
 
     return parentY;
   };
@@ -419,6 +516,7 @@ const getLayoutedElements = (nodes: MindmapNode[], edges: MindmapEdge[]) => {
   // Layout each root separately, preserving root positions
   rootNodes.forEach((root) => {
     currentY = 0;
+    visited.clear();
     // Use the root's existing position instead of calculating a new one
     const rootX = root.position.x;
     const rootY = root.position.y;
@@ -533,6 +631,14 @@ const MindmapNodeComponent = ({ data, id, selected }: any) => {
   const borderTint = hexToRgba(statusMeta.color, 0.35);
   const focusRing = hexToRgba(statusMeta.color, 0.25);
 
+  const emitNodeFocus = useCallback(() => {
+    window.dispatchEvent(
+      new CustomEvent('focus-node', {
+        detail: { nodeId: id },
+      }),
+    );
+  }, [id]);
+
   const nodeClass = `mindmap-master-node level-${data.level}`;
 
   const style: React.CSSProperties = {
@@ -609,9 +715,15 @@ const MindmapNodeComponent = ({ data, id, selected }: any) => {
                     commitLabel();
                   }}
                   onChange={(event) => setLabel(event.target.value)}
-                  onFocus={() => setIsTitleFocused(true)}
+                  onFocus={() => {
+                    emitNodeFocus();
+                    setIsTitleFocused(true);
+                  }}
                   onKeyDown={handleTitleKeyDown}
-                  onPointerDown={(event) => event.stopPropagation()}
+                  onPointerDown={(event) => {
+                    emitNodeFocus();
+                    event.stopPropagation();
+                  }}
                   placeholder="Give this idea a name"
                   ref={inputRef}
                   type="text"
@@ -639,9 +751,15 @@ const MindmapNodeComponent = ({ data, id, selected }: any) => {
                 commitDescription();
               }}
               onChange={(event) => setDescription(event.target.value)}
-              onFocus={() => setIsDescriptionFocused(true)}
+              onFocus={() => {
+                emitNodeFocus();
+                setIsDescriptionFocused(true);
+              }}
               onKeyDown={handleDescriptionKeyDown}
-              onPointerDown={(event) => event.stopPropagation()}
+              onPointerDown={(event) => {
+                emitNodeFocus();
+                event.stopPropagation();
+              }}
               placeholder="Describe what should happen here"
               ref={descriptionRef}
               rows={3}
@@ -784,7 +902,9 @@ interface NodeActionToolbarProps {
   onColorChange: (color: string) => void;
   onEmojiChange: (emoji: string) => void;
   onToggleCollapse: (nodeId: string, collapsed: boolean) => void;
-  onStatusChange: (nodeId: string, status: string) => void;
+  onStatusChange: (nodeId: string, status: StatusValue) => void;
+  onOpenAI: (nodeId: string) => void;
+  isAiActive: boolean;
 }
 
 const NodeActionToolbar = ({
@@ -795,11 +915,20 @@ const NodeActionToolbar = ({
   onEmojiChange,
   onToggleCollapse,
   onStatusChange,
+  onOpenAI,
+  isAiActive,
 }: NodeActionToolbarProps) => {
   const [showColors, setShowColors] = useState(false);
   const [showEmojis, setShowEmojis] = useState(false);
   const [showStatus, setShowStatus] = useState(false);
   const transform = useStore((state) => state.transform);
+  const storeNode = useStore(
+    useCallback(
+      (state) =>
+        node ? state.nodeInternals?.get?.(node.id) ?? null : null,
+      [node?.id],
+    ),
+  );
   const selectedNodeId = node?.id;
 
   useEffect(() => {
@@ -817,16 +946,32 @@ const NodeActionToolbar = ({
       return null;
     }
 
-    const position = (node as any).positionAbsolute ?? node.position;
-    const baseWidth = node.measured?.width ?? node.width ?? 160;
-    const baseHeight = node.measured?.height ?? node.height ?? 60;
+    const referenceNode = storeNode ?? node;
+    const position =
+      referenceNode?.positionAbsolute ?? node.positionAbsolute ?? node.position;
+    if (!position) {
+      return null;
+    }
+
+    const baseWidth =
+      referenceNode?.measured?.width ??
+      node.measured?.width ??
+      referenceNode?.width ??
+      node.width ??
+      160;
+    const baseHeight =
+      referenceNode?.measured?.height ??
+      node.measured?.height ??
+      referenceNode?.height ??
+      node.height ??
+      60;
 
     return {
       left: viewportX + ((position?.x ?? 0) + baseWidth / 2) * zoom,
       top: viewportY + (position?.y ?? 0) * zoom,
       '--toolbar-offset': `${(baseHeight + 16) * zoom}px`,
     } as CSSProperties;
-  }, [node, node?.position, node?.measured, viewportX, viewportY, zoom]);
+  }, [node, storeNode, viewportX, viewportY, zoom]);
 
   if (!node || !anchorStyle) {
     return null;
@@ -858,6 +1003,15 @@ const NodeActionToolbar = ({
           type="button"
         >
           <IconPlus size={18} />
+        </button>
+
+        <button
+          className={isAiActive ? 'icon-btn is-active' : 'icon-btn'}
+          onClick={() => onOpenAI(node.id)}
+          title="Open AI assistant"
+          type="button"
+        >
+          <IconMagicWand size={18} />
         </button>
 
         <div className="floating-divider" />
@@ -1020,10 +1174,128 @@ const MindmapMasterFlow = () => {
     },
   ];
 
+  const savedFlow = useMemo<StoredFlowState | null>(() => {
+    if (typeof window === 'undefined') {
+      return null;
+    }
+
+    try {
+      const raw = window.localStorage.getItem(FLOW_STORAGE_KEY);
+      if (!raw) {
+        return null;
+      }
+
+      const parsed = JSON.parse(raw) as StoredFlowState;
+      if (!parsed || !Array.isArray(parsed.nodes) || !Array.isArray(parsed.edges)) {
+        return null;
+      }
+
+      const sanitizedNodes = parsed.nodes
+        .map((rawNode: any) => {
+          if (!rawNode?.id) {
+            return null;
+          }
+
+          const label =
+            typeof rawNode?.data?.label === 'string'
+              ? rawNode.data.label
+              : 'Untitled';
+
+          const nodePosition = rawNode.position ?? { x: 0, y: 0 };
+          const positionAbsolute =
+            rawNode.positionAbsolute ?? rawNode.position ?? nodePosition;
+
+          const sanitized: MindmapNode = {
+            ...rawNode,
+            id: String(rawNode.id),
+            type: 'mindmap',
+            position: nodePosition,
+            positionAbsolute,
+            data: {
+              ...rawNode.data,
+              label,
+              level:
+                typeof rawNode?.data?.level === 'number'
+                  ? rawNode.data.level
+                  : 0,
+            },
+          };
+
+          return sanitized;
+        })
+        .filter(Boolean) as MindmapNode[];
+
+      const sanitizedEdges = parsed.edges
+        .map((rawEdge: any) => {
+          if (!rawEdge?.source || !rawEdge?.target) {
+            return null;
+          }
+
+          const id = rawEdge?.id
+            ? String(rawEdge.id)
+            : `${String(rawEdge.source)}-${String(rawEdge.target)}`;
+
+          const sanitized: MindmapEdge = {
+            id,
+            source: String(rawEdge.source),
+            target: String(rawEdge.target),
+            sourceHandle:
+              rawEdge.sourceHandle ?? `${String(rawEdge.source)}-right`,
+            targetHandle:
+              rawEdge.targetHandle ?? `${String(rawEdge.target)}-left`,
+            type: rawEdge.type ?? 'default',
+            data: rawEdge.data,
+            style:
+              rawEdge.style ?? {
+                stroke: '#cbd5e1',
+                strokeWidth: 2.5,
+              },
+            animated: rawEdge.animated,
+          };
+
+          return sanitized;
+        })
+        .filter(Boolean) as MindmapEdge[];
+
+      return {
+        nodes: sanitizedNodes,
+        edges: sanitizedEdges,
+        viewport: parsed.viewport,
+      };
+    } catch (_error) {
+      return null;
+    }
+  }, []);
+
+  const hasSavedFlow = Boolean(savedFlow);
+  const savedViewport = savedFlow?.viewport ?? null;
+
   const [nodes, setNodes, onNodesChange] =
-    useNodesState<MindmapNode>(initialNodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState<MindmapEdge>([]);
+    useNodesState<MindmapNode>(savedFlow?.nodes?.length ? savedFlow.nodes : initialNodes);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<MindmapEdge>(
+    savedFlow?.edges ?? [],
+  );
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [isAiPanelOpen, setAiPanelOpen] = useState(false);
+  const [aiPanelNodeId, setAiPanelNodeId] = useState<string | null>(null);
+  const [aiPanelPhase] = useState<AIChatPanelPhase>('idle');
+  const [aiConversations, setAiConversations] = useState<
+    Record<string, StoredAIMessage[]>
+  >(() => {
+    if (typeof window === 'undefined') {
+      return {};
+    }
+    try {
+      const raw = window.localStorage.getItem(AI_CONVERSATION_STORAGE_KEY);
+      if (!raw) {
+        return {};
+      }
+      const parsed = JSON.parse(raw) as Record<string, StoredAIMessage[]>;
+      return parsed ?? {};
+    } catch (_error) {
+      return {};
+    }
+  });
   const { fitView, setCenter } = useReactFlow();
   const transformStore = useStore((state) => state.transform);
   const transformRef = useRef<[number, number, number]>([0, 0, 1]);
@@ -1048,8 +1320,54 @@ const MindmapMasterFlow = () => {
   }, [edges]);
 
   useEffect(() => {
+    if (!hasSavedFlow || !savedFlow) {
+      return;
+    }
+
+    let maxId = nodeIdCounter;
+    savedFlow.nodes.forEach((node) => {
+      const match = /^node-(\d+)$/i.exec(node.id);
+      if (!match) {
+        return;
+      }
+
+      const value = Number.parseInt(match[1], 10);
+      if (Number.isFinite(value)) {
+        maxId = Math.max(maxId, value + 1);
+      }
+    });
+
+    nodeIdCounter = Math.max(nodeIdCounter, maxId);
+  }, [hasSavedFlow, savedFlow]);
+
+  useEffect(() => {
     transformRef.current = transformStore;
   }, [transformStore]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const [x, y, zoom] = transformRef.current;
+    const payload: StoredFlowState = {
+      nodes: serializeNodesForStorage(nodesRef.current),
+      edges: serializeEdgesForStorage(edgesRef.current),
+      viewport: { x, y, zoom },
+    };
+
+    window.localStorage.setItem(FLOW_STORAGE_KEY, JSON.stringify(payload));
+  }, [nodes, edges, transformStore]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    window.localStorage.setItem(
+      AI_CONVERSATION_STORAGE_KEY,
+      JSON.stringify(aiConversations),
+    );
+  }, [aiConversations]);
 
   const syncHistoryMeta = useCallback(() => {
     setHistoryState({
@@ -1059,6 +1377,129 @@ const MindmapMasterFlow = () => {
         historyIndexRef.current < historyRef.current.length - 1,
     });
   }, []);
+
+  const appendConversation = useCallback(
+    (nodeId: string, additions: StoredAIMessage[]) => {
+      if (!nodeId || additions.length === 0) {
+        return;
+      }
+      setAiConversations((prev) => {
+        const previous = prev[nodeId] ?? [];
+        return {
+          ...prev,
+          [nodeId]: [...previous, ...additions],
+        };
+      });
+    },
+    [],
+  );
+
+  const openAiPanel = useCallback((nodeId: string) => {
+    setAiPanelOpen(true);
+    setAiPanelNodeId(nodeId);
+  }, []);
+
+  const closeAiPanel = useCallback(() => {
+    setAiPanelOpen(false);
+  }, []);
+
+  useEffect(() => {
+    if (!isAiPanelOpen) {
+      return;
+    }
+    if (selectedNodeId) {
+      setAiPanelNodeId(selectedNodeId);
+      return;
+    }
+    setAiPanelNodeId(null);
+  }, [isAiPanelOpen, selectedNodeId]);
+
+  const handleQuickActionSelect = useCallback(
+    (actionId: string) => {
+      if (!aiPanelNodeId) {
+        return;
+      }
+
+      const action = AI_QUICK_ACTIONS.find((item) => item.id === actionId);
+      if (!action) {
+        return;
+      }
+
+      const now = Date.now();
+      const targetNode =
+        nodesRef.current.find((nodeItem) => nodeItem.id === aiPanelNodeId) ?? null;
+      const nodeLabel = targetNode?.data?.label ?? 'selected node';
+
+      const userMessage: StoredAIMessage = {
+        id: createMessageId('user'),
+        role: 'user',
+        content: `Quick action: ${action.label}`,
+        createdAt: now,
+        kind: 'quick',
+      };
+
+      const assistantMessage: StoredAIMessage = {
+        id: createMessageId('assistant'),
+        role: 'assistant',
+        content: `Queued “${action.label}” for “${nodeLabel}”. AI suggestions will appear here soon.`,
+        createdAt: now + 1,
+        kind: 'quick',
+      };
+
+      appendConversation(aiPanelNodeId, [userMessage, assistantMessage]);
+    },
+    [aiPanelNodeId, appendConversation],
+  );
+
+  const handlePromptSubmit = useCallback(
+    (content: string) => {
+      if (!aiPanelNodeId) {
+        return;
+      }
+
+      const trimmed = content.trim();
+      if (!trimmed) {
+        return;
+      }
+
+      const now = Date.now();
+      const targetNode =
+        nodesRef.current.find((nodeItem) => nodeItem.id === aiPanelNodeId) ?? null;
+      const nodeLabel = targetNode?.data?.label ?? 'selected node';
+
+      const userMessage: StoredAIMessage = {
+        id: createMessageId('user'),
+        role: 'user',
+        content: trimmed,
+        createdAt: now,
+        kind: 'manual',
+      };
+
+      const assistantMessage: StoredAIMessage = {
+        id: createMessageId('assistant'),
+        role: 'assistant',
+        content: `Saved your request for “${nodeLabel}”. AI responses will appear here once generation is connected.`,
+        createdAt: now + 1,
+        kind: 'manual',
+      };
+
+      appendConversation(aiPanelNodeId, [userMessage, assistantMessage]);
+    },
+    [aiPanelNodeId, appendConversation],
+  );
+
+  const handleSelectionChange = useCallback(
+    ({ nodes: selection }: OnSelectionChangeParams<MindmapNode>) => {
+      if (selection.length === 0) {
+        setSelectedNodeId(null);
+        return;
+      }
+
+      const primary = selection[selection.length - 1];
+      setSelectedNodeId(primary.id);
+    },
+    [],
+  );
 
   const pushHistory = useCallback(
     (nodesSnapshot: MindmapNode[], edgesSnapshot: MindmapEdge[]) => {
@@ -1105,87 +1546,89 @@ const MindmapMasterFlow = () => {
     [setEdges, setNodes, setCenter],
   );
 
-const updateGraph = useCallback(
-  (
-    mutator: (
-      currentNodes: MindmapNode[],
-      currentEdges: MindmapEdge[],
-    ) => { nodes: MindmapNode[]; edges: MindmapEdge[] } | null,
-    options?: { relayout?: boolean },
-  ) => {
-    const { relayout = true } = options ?? {};
-    const prevNodes = nodesRef.current;
-    const prevEdges = edgesRef.current;
-    const result = mutator(prevNodes, prevEdges);
-    if (!result) {
-      return;
-    }
-
-    const { nodes: nextNodesRaw, edges: nextEdges } = result;
-
-    const collapseInfo = computeCollapseInfo(nextNodesRaw, nextEdges);
-    const visibleNodeMap = new Map<string, MindmapNode>();
-    nextNodesRaw.forEach((node) => {
-      if (collapseInfo.visibleIds.has(node.id)) {
-        visibleNodeMap.set(node.id, node);
+  const updateGraph = useCallback(
+    (
+      mutator: (
+        currentNodes: MindmapNode[],
+        currentEdges: MindmapEdge[],
+      ) => { nodes: MindmapNode[]; edges: MindmapEdge[] } | null,
+      options?: { relayout?: boolean },
+    ) => {
+      const { relayout = true } = options ?? {};
+      const prevNodes = nodesRef.current;
+      const prevEdges = edgesRef.current;
+      const result = mutator(prevNodes, prevEdges);
+      if (!result) {
+        return;
       }
-    });
 
-    let processedNodes: MindmapNode[];
+      const { nodes: nextNodesRaw, edges: nextEdges } = result;
 
-    if (relayout) {
-      const visibleNodes = Array.from(visibleNodeMap.values());
-      const visibleEdges = nextEdges.filter(
-        (edge) =>
-          collapseInfo.visibleIds.has(edge.source) &&
-          collapseInfo.visibleIds.has(edge.target),
-      );
-
-      const layoutedVisibleNodes = getLayoutedElements(
-        visibleNodes,
-        visibleEdges,
-      );
-      const positionMap = new Map<string, MindmapNode>(
-        layoutedVisibleNodes.map((node) => [node.id, node]),
-      );
-
-      processedNodes = nextNodesRaw.map((node) => {
-        const layoutNode = positionMap.get(node.id);
-        if (!layoutNode) {
-          return { ...node };
+      const collapseInfo = computeCollapseInfo(nextNodesRaw, nextEdges);
+      const visibleNodeMap = new Map<string, MindmapNode>();
+      nextNodesRaw.forEach((node) => {
+        if (collapseInfo.visibleIds.has(node.id)) {
+          visibleNodeMap.set(node.id, node);
         }
-        return {
-          ...node,
-          position: layoutNode.position,
-          positionAbsolute: layoutNode.position,
-        };
       });
-    } else {
-      processedNodes = nextNodesRaw.map((node) => {
-        const prevNode = prevNodes.find((existing) => existing.id === node.id);
-        if (!prevNode) {
-          return { ...node };
-        }
 
-        return {
-          ...node,
-          position: prevNode.position,
-          positionAbsolute: prevNode.positionAbsolute ?? prevNode.position,
-        };
-      });
-    }
+      let processedNodes: MindmapNode[];
 
-    const { nodes: finalNodes, edges: finalEdgesRaw } = applyCollapseState(
-      processedNodes,
-      nextEdges,
-      collapseInfo,
-    );
+      if (relayout) {
+        const visibleNodes = Array.from(visibleNodeMap.values());
+        const visibleEdges = nextEdges.filter(
+          (edge) =>
+            collapseInfo.visibleIds.has(edge.source) &&
+            collapseInfo.visibleIds.has(edge.target),
+        );
 
-    const normalizedEdges = finalEdgesRaw.map((edge) => ({
-      ...edge,
-      sourceHandle: `${edge.source}-right`,
-      targetHandle: `${edge.target}-left`,
-    }));
+        const layoutedVisibleNodes = getLayoutedElements(
+          visibleNodes,
+          visibleEdges,
+        );
+        const positionMap = new Map<string, MindmapNode>(
+          layoutedVisibleNodes.map((node) => [node.id, node]),
+        );
+
+        processedNodes = nextNodesRaw.map((node) => {
+          const layoutNode = positionMap.get(node.id);
+          if (!layoutNode) {
+            return { ...node };
+          }
+          return {
+            ...node,
+            position: layoutNode.position,
+            positionAbsolute: layoutNode.position,
+          };
+        });
+      } else {
+        processedNodes = nextNodesRaw.map((node) => {
+          const prevNode = prevNodes.find(
+            (existing) => existing.id === node.id,
+          );
+          if (!prevNode) {
+            return { ...node };
+          }
+
+          return {
+            ...node,
+            position: prevNode.position,
+            positionAbsolute: prevNode.positionAbsolute ?? prevNode.position,
+          };
+        });
+      }
+
+      const { nodes: finalNodes, edges: finalEdgesRaw } = applyCollapseState(
+        processedNodes,
+        nextEdges,
+        collapseInfo,
+      );
+
+      const normalizedEdges = finalEdgesRaw.map((edge) => ({
+        ...edge,
+        sourceHandle: `${edge.source}-right`,
+        targetHandle: `${edge.target}-left`,
+      }));
 
       nodesRef.current = finalNodes;
       edgesRef.current = normalizedEdges;
@@ -1194,11 +1637,11 @@ const updateGraph = useCallback(
       setEdges(normalizedEdges);
 
       if (!isRestoringRef.current) {
-      pushHistory(finalNodes, normalizedEdges);
-    }
-  },
-  [pushHistory, setEdges, setNodes],
-);
+        pushHistory(finalNodes, normalizedEdges);
+      }
+    },
+    [pushHistory, setEdges, setNodes],
+  );
 
   const relayout = useCallback(() => {
     updateGraph(
@@ -1256,12 +1699,23 @@ const updateGraph = useCallback(
   }, [restoreSnapshot, syncHistoryMeta]);
 
   useEffect(() => {
-    updateGraph((currentNodes, currentEdges) => ({
-      nodes: [...currentNodes],
-      edges: [...currentEdges],
-    }));
+    updateGraph(
+      (currentNodes, currentEdges) => ({
+        nodes: [...currentNodes],
+        edges: [...currentEdges],
+      }),
+      { relayout: !hasSavedFlow },
+    );
 
     const timeout = setTimeout(() => {
+      if (hasSavedFlow && savedViewport) {
+        setCenter(savedViewport.x, savedViewport.y, {
+          zoom: savedViewport.zoom,
+          duration: 0,
+        });
+        return;
+      }
+
       fitView({
         padding: 0.2,
         duration: ZOOM_DURATIONS.initial,
@@ -1270,7 +1724,13 @@ const updateGraph = useCallback(
     }, 0);
 
     return () => clearTimeout(timeout);
-  }, [fitView, updateGraph]);
+  }, [
+    fitView,
+    hasSavedFlow,
+    savedViewport,
+    setCenter,
+    updateGraph,
+  ]);
 
   // Add child node
   const addChild = useCallback(
@@ -1413,7 +1873,7 @@ const updateGraph = useCallback(
 
   // Update node status
   const updateNodeStatus = useCallback(
-    (id: string, status: string) => {
+    (id: string, status: StatusValue) => {
       updateGraph(
         (nodesState, edgesState) => ({
           nodes: nodesState.map((n) =>
@@ -1626,6 +2086,10 @@ const updateGraph = useCallback(
   // Clear all
   const clearAll = useCallback(() => {
     if (confirm('Clear all nodes? This cannot be undone.')) {
+      if (typeof window !== 'undefined') {
+        window.localStorage.removeItem(FLOW_STORAGE_KEY);
+      }
+
       const resetNodes: MindmapNode[] = [
         {
           id: 'root',
@@ -1666,6 +2130,28 @@ const updateGraph = useCallback(
     const handleUpdateStatus = (e: Event) => {
       const { id, status } = (e as CustomEvent).detail;
       updateNodeStatus(id, status);
+    };
+
+    const handleFocusNode = (e: Event) => {
+      const { nodeId } = (e as CustomEvent).detail ?? {};
+      if (!nodeId) {
+        return;
+      }
+
+      setSelectedNodeId(nodeId);
+
+      setNodes((prev) => {
+        let changed = false;
+        const next = prev.map((node) => {
+          const shouldSelect = node.id === nodeId;
+          if (node.selected !== shouldSelect) {
+            changed = true;
+            return { ...node, selected: shouldSelect };
+          }
+          return node;
+        });
+        return changed ? next : prev;
+      });
     };
 
     // Handle keyboard shortcuts
@@ -1716,6 +2202,7 @@ const updateGraph = useCallback(
     window.addEventListener('update-node-label', handleUpdateLabel);
     window.addEventListener('update-node-description', handleUpdateDescription);
     window.addEventListener('update-node-status', handleUpdateStatus);
+    window.addEventListener('focus-node', handleFocusNode);
     window.addEventListener('keydown', handleKeyDown);
 
     return () => {
@@ -1727,6 +2214,7 @@ const updateGraph = useCallback(
         handleUpdateDescription,
       );
       window.removeEventListener('update-node-status', handleUpdateStatus);
+      window.removeEventListener('focus-node', handleFocusNode);
       window.removeEventListener('keydown', handleKeyDown);
     };
   }, [
@@ -1735,6 +2223,7 @@ const updateGraph = useCallback(
     updateNodeLabel,
     updateNodeDescription,
     updateNodeStatus,
+    setNodes,
     redo,
     selectedNodeId,
     undo,
@@ -1825,59 +2314,120 @@ const updateGraph = useCallback(
     ? (nodes.find((n) => n.id === selectedNodeId) ?? null)
     : null;
 
+  const aiPanelNode = aiPanelNodeId
+    ? (nodes.find((n) => n.id === aiPanelNodeId) ?? null)
+    : null;
+
+  const aiStatusMeta = aiPanelNode
+    ? STATUS_OPTIONS.find(
+        (option) => option.value === normalizeStatus(aiPanelNode.data.status),
+      )
+    : null;
+
+  const aiPanelSummary: AIChatPanelNodeSummary | null = aiPanelNode
+    ? {
+        id: aiPanelNode.id,
+        label: aiPanelNode.data.label,
+        description:
+          typeof aiPanelNode.data.description === 'string'
+            ? aiPanelNode.data.description
+            : undefined,
+        level: aiPanelNode.data.level,
+        childCount: edges.filter((edge) => edge.source === aiPanelNode.id)
+          .length,
+        statusLabel: aiStatusMeta?.label,
+        statusColor: aiStatusMeta?.color,
+        statusIcon: aiStatusMeta?.icon,
+      }
+    : null;
+
+  const panelMessages = useMemo<AIChatPanelMessage[]>(() => {
+    if (!aiPanelNodeId) {
+      return [];
+    }
+    const entries = aiConversations[aiPanelNodeId] ?? [];
+    return entries.map(({ id, role, content, createdAt }) => ({
+      id,
+      role,
+      content,
+      createdAt,
+    }));
+  }, [aiConversations, aiPanelNodeId]);
+
   return (
-    <div style={{ width: '100vw', height: '100vh' }}>
-      <ReactFlow
-        defaultEdgeOptions={{
-          type: 'default',
-          style: { stroke: '#cbd5e1', strokeWidth: 2.5 },
-        }}
-        edges={edges}
-        fitView
-        maxZoom={2}
-        minZoom={0.1}
-        nodes={nodes}
-        nodeTypes={nodeTypes}
-        onEdgesChange={onEdgesChange}
-        onNodesChange={handleNodesChange}
-      >
-        <Background
-          color="#bbb"
-          gap={16}
-          size={1}
-          variant={BackgroundVariant.Dots}
-        />
-        <Controls />
-        <MiniMap
-          nodeColor={(node: any) => {
-            const color = node.data?.color;
-            return color || '#4facfe';
+    <div className="mindmap-shell">
+      <div className="mindmap-canvas">
+        <ReactFlow
+          defaultEdgeOptions={{
+            type: 'default',
+            style: { stroke: '#cbd5e1', strokeWidth: 2.5 },
           }}
-          pannable
-          zoomable
-        />
+          edges={edges}
+          fitView
+          maxZoom={2}
+          minZoom={0.1}
+          nodes={nodes}
+          nodeTypes={nodeTypes}
+          onEdgesChange={onEdgesChange}
+          onNodesChange={handleNodesChange}
+          onSelectionChange={handleSelectionChange}
+          style={{ width: '100%', height: '100%' }}
+        >
+          <Background
+            color="#bbb"
+            gap={16}
+            size={1}
+            variant={BackgroundVariant.Dots}
+          />
+          <Controls />
+          <MiniMap
+            nodeColor={(node: any) => {
+              const color = node.data?.color;
+              return color || '#4facfe';
+            }}
+            pannable
+            zoomable
+          />
 
-        <Toolbar
-          canRedo={historyState.canRedo}
-          canUndo={historyState.canUndo}
-          onAddRoot={addRootNode}
-          onAutoLayout={relayout}
-          onClear={clearAll}
-          onExport={exportData}
-          onImport={importData}
-          onRedo={redo}
-          onUndo={undo}
-        />
+          <Toolbar
+            canRedo={historyState.canRedo}
+            canUndo={historyState.canUndo}
+            onAddRoot={addRootNode}
+            onAutoLayout={relayout}
+            onClear={clearAll}
+            onExport={exportData}
+            onImport={importData}
+            onRedo={redo}
+            onUndo={undo}
+          />
 
-        <NodeActionToolbar
-          node={selectedNode}
-          onAddChild={addChild}
-          onColorChange={changeNodeColor}
-          onDelete={deleteNode}
-          onEmojiChange={changeNodeEmoji}
-          onToggleCollapse={toggleCollapse}
-        />
-      </ReactFlow>
+          <NodeActionToolbar
+            isAiActive={
+              Boolean(selectedNode?.id) &&
+              isAiPanelOpen &&
+              aiPanelNodeId === selectedNode?.id
+            }
+            node={selectedNode}
+            onAddChild={addChild}
+            onColorChange={changeNodeColor}
+            onDelete={deleteNode}
+            onEmojiChange={changeNodeEmoji}
+            onOpenAI={openAiPanel}
+            onStatusChange={updateNodeStatus}
+            onToggleCollapse={toggleCollapse}
+          />
+        </ReactFlow>
+      </div>
+      <AIChatPanel
+        isOpen={isAiPanelOpen}
+        messages={panelMessages}
+        node={aiPanelSummary}
+        onSelectQuickAction={handleQuickActionSelect}
+        onClose={closeAiPanel}
+        onSubmitMessage={handlePromptSubmit}
+        phase={aiPanelPhase}
+        quickActions={AI_QUICK_ACTIONS}
+      />
     </div>
   );
 };
