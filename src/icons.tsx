@@ -114,3 +114,12 @@ export const IconNote = createIcon([
   <path d="M10 13h4" key="line1" />,
   <path d="M9 17h6" key="line2" />,
 ]);
+
+export const IconAI = createIcon([
+  <path
+    d="M12 3L14.5 8.5L20 11L14.5 13.5L12 19L9.5 13.5L4 11L9.5 8.5L12 3Z"
+    key="star"
+  />,
+  <path d="M19 3L20 5L22 6L20 7L19 9L18 7L16 6L18 5L19 3Z" key="spark1" />,
+  <path d="M5 15L6 17L8 18L6 19L5 21L4 19L2 18L4 17L5 15Z" key="spark2" />,
+]);

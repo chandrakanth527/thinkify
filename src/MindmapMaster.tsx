@@ -46,6 +46,7 @@ import {
   type AIIntent,
 } from "@/components/AIChatPanel";
 import {
+  IconAI,
   IconCollapse,
   IconDownload,
   IconExpand,
@@ -1819,7 +1820,7 @@ const AiMenu = ({
         title="AI actions"
         type="button"
       >
-        <IconMagicWand size={18} />
+        <IconAI size={18} />
       </button>
       {isOpen ? (
         <div className="ai-toolbar-menu-popover" role="menu">
@@ -2009,6 +2010,8 @@ const NodeActionToolbar = ({
         >
           <IconNote size={18} />
         </button>
+
+        <div className="floating-divider" />
 
         <AiMenu
           isActive={isAiActive}
