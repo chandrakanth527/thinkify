@@ -23,6 +23,7 @@ import {
 } from '@xyflow/react';
 import {
   type CSSProperties,
+  type ReactNode,
   useCallback,
   useEffect,
   useMemo,
@@ -340,286 +341,241 @@ const hexToRgba = (hex: string, alpha: number): string => {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 };
 
+type MarkdownBlock =
+  | { type: 'h2' | 'h3' | 'p' | 'blockquote'; text: string }
+  | { type: 'ul' | 'ol'; items: string[] }
+  | { type: 'spacer' };
+
+const renderInlineNodes = (text: string): ReactNode[] => {
+  const nodes: ReactNode[] = [];
+  const regex = /(\*\*[^*]+\*\*|__[^_]+__|\*[^*]+\*|_[^_]+_)/g;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null = regex.exec(text);
+
+  while (match) {
+    if (match.index > lastIndex) {
+      nodes.push(text.slice(lastIndex, match.index));
+    }
+
+    const token = match[0];
+    const inner =
+      token.startsWith('**') || token.startsWith('__')
+        ? token.slice(2, -2)
+        : token.slice(1, -1);
+    const children = renderInlineNodes(inner);
+    const key = `${match.index}-${token.length}`;
+
+    if (token.startsWith('**') || token.startsWith('__')) {
+      nodes.push(
+        <strong key={`strong-${key}`}>
+          {children.length ? children : inner}
+        </strong>,
+      );
+    } else {
+      nodes.push(
+        <em key={`em-${key}`}>{children.length ? children : inner}</em>,
+      );
+    }
+
+    lastIndex = regex.lastIndex;
+    match = regex.exec(text);
+  }
+
+  if (lastIndex < text.length) {
+    nodes.push(text.slice(lastIndex));
+  }
+
+  return nodes;
+};
+
+const parseMarkdownBlocks = (input: string): MarkdownBlock[] => {
+  const lines = input.replace(/\r?\n/g, '\n').split('\n');
+  const blocks: MarkdownBlock[] = [];
+  let currentList: { type: 'ul' | 'ol'; items: string[] } | null = null;
+
+  const flushList = () => {
+    if (currentList) {
+      blocks.push({ type: currentList.type, items: currentList.items });
+      currentList = null;
+    }
+  };
+
+  lines.forEach((line) => {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      flushList();
+      const last = blocks[blocks.length - 1];
+      if (!last || last.type !== 'spacer') {
+        blocks.push({ type: 'spacer' });
+      }
+      return;
+    }
+
+    if (trimmed.startsWith('### ')) {
+      flushList();
+      blocks.push({ type: 'h3', text: trimmed.slice(4) });
+      return;
+    }
+
+    if (trimmed.startsWith('## ')) {
+      flushList();
+      blocks.push({ type: 'h2', text: trimmed.slice(3) });
+      return;
+    }
+
+    if (trimmed.startsWith('> ')) {
+      flushList();
+      blocks.push({ type: 'blockquote', text: trimmed.slice(2) });
+      return;
+    }
+
+    const olMatch = trimmed.match(/^(\d+)\.\s+(.*)$/);
+    if (olMatch) {
+      if (!currentList || currentList.type !== 'ol') {
+        flushList();
+        currentList = { type: 'ol', items: [] };
+      }
+      currentList.items.push(olMatch[2]);
+      return;
+    }
+
+    const ulMatch = trimmed.match(/^[-*]\s+(.*)$/);
+    if (ulMatch) {
+      if (!currentList || currentList.type !== 'ul') {
+        flushList();
+        currentList = { type: 'ul', items: [] };
+      }
+      currentList.items.push(ulMatch[1]);
+      return;
+    }
+
+    flushList();
+    blocks.push({ type: 'p', text: trimmed });
+  });
+
+  flushList();
+
+  if (blocks.length > 0 && blocks[blocks.length - 1].type === 'spacer') {
+    blocks.pop();
+  }
+
+  return blocks;
+};
+
+const renderEdgeNoteMarkdown = (input: string): ReactNode[] => {
+  const trimmed = input.trim();
+  if (!trimmed) {
+    return [
+      <p className="edge-note-empty" key="empty">
+        Start drafting…
+      </p>,
+    ];
+  }
+
+  const blocks = parseMarkdownBlocks(input);
+
+  return blocks.map((block, index) => {
+    const blockKey =
+      block.type === 'spacer'
+        ? `spacer-${index}`
+        : block.type === 'ul' || block.type === 'ol'
+          ? `${block.type}-${block.items.join('|')}`
+          : `${block.type}-${block.text}`;
+
+    switch (block.type) {
+      case 'h2':
+        return (
+          <h2 key={`block-${index}-${blockKey}`}>
+            {renderInlineNodes(block.text)}
+          </h2>
+        );
+      case 'h3':
+        return (
+          <h3 key={`block-${index}-${blockKey}`}>
+            {renderInlineNodes(block.text)}
+          </h3>
+        );
+      case 'blockquote':
+        return (
+          <blockquote key={`block-${index}-${blockKey}`}>
+            {renderInlineNodes(block.text)}
+          </blockquote>
+        );
+      case 'ul':
+        return (
+          <ul key={`block-${index}-${blockKey}`}>
+            {block.items.map((item, itemIndex) => (
+              <li key={`ul-${index}-${blockKey}-${itemIndex}-${item}`}>
+                {renderInlineNodes(item)}
+              </li>
+            ))}
+          </ul>
+        );
+      case 'ol':
+        return (
+          <ol key={`block-${index}-${blockKey}`}>
+            {block.items.map((item, itemIndex) => (
+              <li key={`ol-${index}-${blockKey}-${itemIndex}-${item}`}>
+                {renderInlineNodes(item)}
+              </li>
+            ))}
+          </ol>
+        );
+      case 'spacer':
+        return (
+          <div
+            className="edge-note-spacer"
+            key={`spacer-${index}-${blockKey}`}
+          />
+        );
+      case 'p':
+      default:
+        return (
+          <p key={`block-${index}-${blockKey}`}>
+            {renderInlineNodes(block.text)}
+          </p>
+        );
+    }
+  });
+};
 const computeCollapseInfo = (
   nodes: MindmapNode[],
   edges: MindmapEdge[],
 ): CollapseInfo => {
-  const nodeMap = new Map<string, MindmapNode>(
-    nodes.map((node) => [node.id, node]),
-  );
-  const childrenMap = new Map<string, string[]>();
-  const parentMap = new Map<string, string>();
-
-  edges.forEach((edge) => {
-    if (!childrenMap.has(edge.source)) {
-      childrenMap.set(edge.source, []);
-    }
-    childrenMap.get(edge.source)!.push(edge.target);
-    parentMap.set(edge.target, edge.source);
-  });
-
-  const subtreeSize = new Map<string, number>();
-  const sizeVisited = new Set<string>();
-
-  const computeSize = (nodeId: string): number => {
-    if (subtreeSize.has(nodeId)) {
-      return subtreeSize.get(nodeId)!;
-    }
-    if (sizeVisited.has(nodeId)) {
-      return 0;
-    }
-    sizeVisited.add(nodeId);
-    const children = childrenMap.get(nodeId) ?? [];
-    let total = 0;
-    for (const child of children) {
-      total += 1 + computeSize(child);
-    }
-    subtreeSize.set(nodeId, total);
-    return total;
-  };
-
-  nodes
-    .filter((node) => !parentMap.has(node.id))
-    .forEach((node) => computeSize(node.id));
-
   const visibleIds = new Set<string>();
   const hiddenChildCount = new Map<string, number>();
-  const visited = new Set<string>();
 
-  const traverse = (nodeId: string, ancestorCollapsed: boolean) => {
-    if (visited.has(nodeId)) {
-      return;
-    }
-    visited.add(nodeId);
-
-    const node = nodeMap.get(nodeId);
-    if (!node) {
-      return;
-    }
-
-    const collapsed = Boolean(node.data?.collapsed);
-    const children = childrenMap.get(nodeId) ?? [];
-
-    if (!ancestorCollapsed) {
-      visibleIds.add(nodeId);
-    }
-
-    let hiddenTotal = 0;
-    if (collapsed || ancestorCollapsed) {
-      for (const childId of children) {
-        hiddenTotal += 1 + (subtreeSize.get(childId) ?? 0);
-        traverse(childId, true);
-      }
-    } else {
-      for (const childId of children) {
-        traverse(childId, false);
-      }
-    }
-
-    hiddenChildCount.set(nodeId, collapsed ? hiddenTotal : 0);
-  };
-
-  nodes
-    .filter((node) => !parentMap.has(node.id))
-    .forEach((node) => traverse(node.id, false));
-
-  nodes
-    .filter((node) => !visited.has(node.id))
-    .forEach((node) => traverse(node.id, false));
-
-  if (visibleIds.size === 0) {
-    nodes.forEach((node) => visibleIds.add(node.id));
-  }
-
-  return {
-    visibleIds,
-    hiddenChildCount,
-  };
-};
-
-const applyCollapseState = (
-  nodes: MindmapNode[],
-  edges: MindmapEdge[],
-  info?: CollapseInfo,
-): { nodes: MindmapNode[]; edges: MindmapEdge[] } => {
-  const collapseInfo = info ?? computeCollapseInfo(nodes, edges);
-
-  if (collapseInfo.visibleIds.size === 0) {
-    nodes.forEach((node) => collapseInfo.visibleIds.add(node.id));
-  }
-
-  const nodeClones = nodes.map((node) => {
-    const collapsed = Boolean(node.data?.collapsed);
-    const nextData = { ...node.data };
-    const hiddenCount = collapseInfo.hiddenChildCount.get(node.id) ?? 0;
-    if (collapsed) {
-      nextData.hiddenChildCount = hiddenCount;
-    } else {
-      delete nextData.hiddenChildCount;
-    }
-
-    return {
-      ...node,
-      data: nextData,
-      hidden: !collapseInfo.visibleIds.has(node.id),
-    };
+  nodes.forEach((node) => {
+    visibleIds.add(node.id);
   });
 
-  const edgeClones = edges.map((edge) => ({
-    ...edge,
-    hidden:
-      !collapseInfo.visibleIds.has(edge.source) ||
-      !collapseInfo.visibleIds.has(edge.target),
-  }));
-
-  return {
-    nodes: nodeClones,
-    edges: edgeClones,
-  };
-};
-
-// ==================== LAYOUT ALGORITHM ====================
-
-const getLayoutedElements = (nodes: MindmapNode[], edges: MindmapEdge[]) => {
-  // Find root nodes (level 0)
-  const rootNodes = nodes.filter((n) => n.data.level === 0);
-  if (rootNodes.length === 0) return nodes;
-
-  // Build parent-child map
-  const childrenMap = new Map<string, MindmapNode[]>();
+  const childMap = new Map<string, string[]>();
   edges.forEach((edge) => {
-    if (!childrenMap.has(edge.source)) {
-      childrenMap.set(edge.source, []);
+    if (!childMap.has(edge.source)) {
+      childMap.set(edge.source, []);
     }
-    const child = nodes.find((n) => n.id === edge.target);
-    if (child) {
-      childrenMap.get(edge.source)!.push(child);
-    }
+    childMap.get(edge.source)!.push(edge.target);
   });
 
-  const layoutedNodes: MindmapNode[] = [];
-  const visited = new Set<string>();
-  const horizontalSpacing = 420;
-  const verticalSpacing = 120;
-
-  // Calculate subtree height
-  const _getSubtreeHeight = (nodeId: string): number => {
-    const children = childrenMap.get(nodeId) || [];
-    if (children.length === 0) return 1;
-    return children.reduce(
-      (sum, child) => sum + _getSubtreeHeight(child.id),
-      0,
-    );
-  };
-
-  // Position nodes recursively
-  let currentY = 0;
-
-  const positionNode = (
-    node: MindmapNode,
-    x: number,
-    yStart: number,
-  ): number => {
-    if (visited.has(node.id)) {
-      // Prevent infinite recursion in case of malformed graphs
-      const existing = layoutedNodes.find((entry) => entry.id === node.id);
-      return existing?.position?.y ?? yStart;
-    }
-    visited.add(node.id);
-
-    const children = childrenMap.get(node.id) || [];
-
-    if (children.length === 0) {
-      // Leaf node
-      const leafY = yStart + currentY * verticalSpacing;
-      const existingIndex = layoutedNodes.findIndex(
-        (entry) => entry.id === node.id,
-      );
-      const nextNode: MindmapNode = {
-        ...node,
-        position: { x, y: leafY },
-      };
-      if (existingIndex >= 0) {
-        layoutedNodes[existingIndex] = nextNode;
-      } else {
-        layoutedNodes.push(nextNode);
-      }
-      currentY += 1;
-      return leafY;
-    }
-
-    // Position children first
-    const childYPositions: number[] = [];
-    children.forEach((child) => {
-      const childY = positionNode(child, x + horizontalSpacing, yStart);
-      childYPositions.push(childY);
+  const collectDescendants = (id: string): string[] => {
+    const children = childMap.get(id) ?? [];
+    const descendants: string[] = [];
+    children.forEach((childId) => {
+      descendants.push(childId);
+      descendants.push(...collectDescendants(childId));
     });
-
-    // Center parent between children
-    const parentY =
-      (childYPositions[0] + childYPositions[childYPositions.length - 1]) / 2;
-
-    const existingIndex = layoutedNodes.findIndex(
-      (entry) => entry.id === node.id,
-    );
-    const nextNode: MindmapNode = {
-      ...node,
-      position: { x, y: parentY },
-    };
-    if (existingIndex >= 0) {
-      layoutedNodes[existingIndex] = nextNode;
-    } else {
-      layoutedNodes.push(nextNode);
-    }
-
-    return parentY;
+    return descendants;
   };
 
-  // Layout each root separately, preserving root positions
-  rootNodes.forEach((root) => {
-    currentY = 0;
-    visited.clear();
-    // Use the root's existing position instead of calculating a new one
-    const rootX = root.position.x;
-    const rootY = root.position.y;
-
-    const subtreeIds = new Set<string>();
-    const collectSubtree = (nodeId: string) => {
-      if (subtreeIds.has(nodeId)) {
-        return;
-      }
-      subtreeIds.add(nodeId);
-      (childrenMap.get(nodeId) || []).forEach((childNode) =>
-        collectSubtree(childNode.id),
-      );
-    };
-    collectSubtree(root.id);
-
-    // Position the tree and capture the layout-computed root position
-    const layoutRootY = positionNode(root, rootX, rootY);
-    const deltaY = rootY - layoutRootY;
-
-    if (deltaY !== 0) {
-      layoutedNodes.forEach((entry, index) => {
-        if (!entry.position || !subtreeIds.has(entry.id)) {
-          return;
-        }
-        const updatedNode = {
-          ...entry,
-          position: { ...entry.position, y: entry.position.y + deltaY },
-          positionAbsolute: entry.positionAbsolute
-            ? {
-                ...entry.positionAbsolute,
-                y: entry.positionAbsolute.y + deltaY,
-              }
-            : entry.positionAbsolute,
-        };
-        layoutedNodes[index] = updatedNode;
-      });
+  nodes.forEach((node) => {
+    if (node.data?.collapsed) {
+      const descendants = collectDescendants(node.id);
+      hiddenChildCount.set(node.id, descendants.length);
+      descendants.forEach((descId) => visibleIds.delete(descId));
     }
   });
 
-  return layoutedNodes;
+  return { visibleIds, hiddenChildCount };
 };
 
 // ==================== MINDMAP NODE COMPONENT ====================
@@ -896,8 +852,9 @@ const EdgeNoteNodeComponent = ({ data, id, selected }: any) => {
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [content, setContent] = useState<string>(data.noteContent ?? '');
   const [isCollapsed, setIsCollapsed] = useState<boolean>(
-    typeof data.noteCollapsed === 'boolean' ? data.noteCollapsed : true,
+    typeof data.noteCollapsed === 'boolean' ? data.noteCollapsed : false,
   );
+  const [isEditingMarkdown, setIsEditingMarkdown] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
   const updateNodeInternals = useUpdateNodeInternals();
@@ -914,21 +871,21 @@ const EdgeNoteNodeComponent = ({ data, id, selected }: any) => {
 
   useEffect(() => {
     setIsCollapsed(
-      typeof data.noteCollapsed === 'boolean' ? data.noteCollapsed : true,
+      typeof data.noteCollapsed === 'boolean' ? data.noteCollapsed : false,
     );
   }, [data.noteCollapsed]);
 
   useEffect(() => {
-    if (!isCollapsed && selected) {
+    if (!isCollapsed && selected && isEditingMarkdown) {
       requestAnimationFrame(() => {
         textareaRef.current?.focus();
       });
     }
-  }, [isCollapsed, selected]);
+  }, [isCollapsed, isEditingMarkdown, selected]);
 
   useEffect(() => {
     updateNodeInternals(id);
-  }, [id, isCollapsed, content, updateNodeInternals]);
+  }, [id, isCollapsed, isEditingMarkdown, content, updateNodeInternals]);
 
   const emitFocus = useCallback(() => {
     window.dispatchEvent(
@@ -940,7 +897,7 @@ const EdgeNoteNodeComponent = ({ data, id, selected }: any) => {
 
   const commitTitle = useCallback(() => {
     const trimmed = label.trim();
-    const nextLabel = trimmed === '' ? data.label ?? 'Content Note' : trimmed;
+    const nextLabel = trimmed === '' ? (data.label ?? 'Content Note') : trimmed;
     setLabel(nextLabel);
     setIsEditingTitle(false);
 
@@ -985,6 +942,9 @@ const EdgeNoteNodeComponent = ({ data, id, selected }: any) => {
   const toggleCollapsed = useCallback(() => {
     const next = !isCollapsed;
     setIsCollapsed(next);
+    if (next) {
+      setIsEditingMarkdown(false);
+    }
     window.dispatchEvent(
       new CustomEvent('toggle-note-collapsed', {
         detail: { nodeId: id, collapsed: next },
@@ -993,11 +953,17 @@ const EdgeNoteNodeComponent = ({ data, id, selected }: any) => {
   }, [id, isCollapsed]);
 
   const applyTextMutation = useCallback(
-    (updater: (value: string, selectionStart: number, selectionEnd: number) => {
-      text: string;
-      selectionStart: number;
-      selectionEnd: number;
-    }) => {
+    (
+      updater: (
+        value: string,
+        selectionStart: number,
+        selectionEnd: number,
+      ) => {
+        text: string;
+        selectionStart: number;
+        selectionEnd: number;
+      },
+    ) => {
       const textarea = textareaRef.current;
       if (!textarea) {
         return;
@@ -1046,7 +1012,8 @@ const EdgeNoteNodeComponent = ({ data, id, selected }: any) => {
         const selection = value.slice(start, end) || placeholder;
         const block = `${needsNewline ? '\n' : ''}${prefix}${selection}`;
         const nextText = `${before}${block}${after}`;
-        const cursorStart = before.length + (needsNewline ? 1 : 0) + prefix.length;
+        const cursorStart =
+          before.length + (needsNewline ? 1 : 0) + prefix.length;
         const cursorEnd = cursorStart + selection.length;
         return {
           text: nextText,
@@ -1067,7 +1034,9 @@ const EdgeNoteNodeComponent = ({ data, id, selected }: any) => {
         const lines = selection ? selection.split('\n') : [''];
         const formatted = lines
           .map((line, index) => {
-            const clean = line.trim() || (type === 'ol' ? `Item ${index + 1}` : 'List item');
+            const clean =
+              line.trim() ||
+              (type === 'ol' ? `Item ${index + 1}` : 'List item');
             return type === 'ol' ? `${index + 1}. ${clean}` : `- ${clean}`;
           })
           .join('\n');
@@ -1096,10 +1065,18 @@ const EdgeNoteNodeComponent = ({ data, id, selected }: any) => {
           insertBlockPrefix('### ', 'Subheading');
           return;
         case 'bold':
-          insertInline({ prefix: '**', suffix: '**', placeholder: 'bold text' });
+          insertInline({
+            prefix: '**',
+            suffix: '**',
+            placeholder: 'bold text',
+          });
           return;
         case 'italic':
-          insertInline({ prefix: '_', suffix: '_', placeholder: 'italic text' });
+          insertInline({
+            prefix: '_',
+            suffix: '_',
+            placeholder: 'italic text',
+          });
           return;
         case 'ul':
           insertList('ul');
@@ -1117,18 +1094,36 @@ const EdgeNoteNodeComponent = ({ data, id, selected }: any) => {
     [insertBlockPrefix, insertInline, insertList],
   );
 
-  const titleClass = isEditingTitle ? 'edge-note-title is-editing' : 'edge-note-title';
+  const titleClass = isEditingTitle
+    ? 'edge-note-title is-editing'
+    : 'edge-note-title';
   const containerClass = `edge-note-node ${isCollapsed ? 'is-collapsed' : 'is-expanded'} ${selected ? 'selected' : ''}`;
   const previewText = content.trim().length
     ? content.trim().split('\n').slice(0, 3).join(' ').slice(0, 140)
     : 'No content yet.';
+  const renderedContent = useMemo(
+    () => renderEdgeNoteMarkdown(content),
+    [content],
+  );
+
+  const toggleMarkdownMode = () => {
+    const next = !isEditingMarkdown;
+    setIsEditingMarkdown(next);
+    if (next) {
+      emitFocus();
+      requestAnimationFrame(() => {
+        textareaRef.current?.focus();
+      });
+    }
+  };
 
   return (
     <div className={containerClass}>
       <Handle
-        className="react-flow-handle handle-left"
+        className="edge-note-handle edge-note-handle-left"
         id={leftHandleId}
         position={Position.Left}
+        style={{ top: '50%', transform: 'translateY(-50%)' }}
         type="target"
       />
 
@@ -1140,7 +1135,11 @@ const EdgeNoteNodeComponent = ({ data, id, selected }: any) => {
             title={isCollapsed ? 'Expand editor' : 'Collapse note'}
             type="button"
           >
-            {isCollapsed ? <IconExpand size={16} /> : <IconCollapse size={16} />}
+            {isCollapsed ? (
+              <IconExpand size={16} />
+            ) : (
+              <IconCollapse size={16} />
+            )}
           </button>
           <button
             className="edge-note-icon"
@@ -1176,13 +1175,25 @@ const EdgeNoteNodeComponent = ({ data, id, selected }: any) => {
             </button>
           )}
           <span className="edge-note-badge">Edge note</span>
+          <button
+            aria-pressed={isEditingMarkdown}
+            className={
+              isEditingMarkdown
+                ? 'edge-note-mode-btn is-active'
+                : 'edge-note-mode-btn'
+            }
+            onClick={toggleMarkdownMode}
+            type="button"
+          >
+            {isEditingMarkdown ? 'Preview' : 'Markdown'}
+          </button>
         </div>
 
         {isCollapsed ? (
           <div className="edge-note-preview" onClick={toggleCollapsed}>
             {previewText}
           </div>
-        ) : (
+        ) : isEditingMarkdown ? (
           <div className="edge-note-editor" onPointerDown={emitFocus}>
             <div className="edge-note-toolbar">
               <button onClick={() => handleFormat('h2')} type="button">
@@ -1215,6 +1226,13 @@ const EdgeNoteNodeComponent = ({ data, id, selected }: any) => {
               value={content}
             />
           </div>
+        ) : (
+          <div
+            className="edge-note-render"
+            onClick={() => setIsEditingMarkdown(false)}
+          >
+            {renderedContent}
+          </div>
         )}
       </div>
 
@@ -1233,9 +1251,10 @@ const EdgeNoteNodeComponent = ({ data, id, selected }: any) => {
       </button>
 
       <Handle
-        className="react-flow-handle handle-right"
+        className="edge-note-handle edge-note-handle-right"
         id={rightHandleId}
         position={Position.Right}
+        style={{ top: '50%', transform: 'translateY(-50%)' }}
         type="source"
       />
     </div>
@@ -1854,16 +1873,14 @@ const MindmapMasterFlow = () => {
               ? 'edge-note'
               : 'mindmap';
           const variant: MindmapNodeData['variant'] =
-            rawVariant === 'edge-note'
-              ? 'edge-note'
-              : 'topic';
+            rawVariant === 'edge-note' ? 'edge-note' : 'topic';
           const isEdgeNote = variant === 'edge-note';
 
-      const sanitized: MindmapNode = {
-        ...rawNode,
-        id: String(rawNode.id),
-        type: nodeType,
-        position: nodePosition,
+          const sanitized: MindmapNode = {
+            ...rawNode,
+            id: String(rawNode.id),
+            type: nodeType,
+            position: nodePosition,
             positionAbsolute,
             data: {
               ...rawNode.data,
@@ -1881,7 +1898,7 @@ const MindmapMasterFlow = () => {
               noteCollapsed: isEdgeNote
                 ? typeof rawNode?.data?.noteCollapsed === 'boolean'
                   ? rawNode.data.noteCollapsed
-                  : true
+                  : false
                 : rawNode.data?.noteCollapsed,
             },
           };
@@ -2153,37 +2170,43 @@ const MindmapMasterFlow = () => {
             .filter(
               (edge) => edge.source === parentId && edge.target !== nodeId,
             )
-            .slice(0, SIBLING_LIMIT)
             .map((edge) =>
               nodesRef.current.find((node) => node.id === edge.target),
             )
-            .filter(Boolean)
+            .filter(
+              (node): node is MindmapNode =>
+                Boolean(node) && node.data?.variant !== 'edge-note',
+            )
+            .slice(0, SIBLING_LIMIT)
             .map((node) => ({
-              id: node!.id,
-              label: node!.data.label,
+              id: node.id,
+              label: node.data.label,
               description:
-                typeof node!.data.description === 'string'
-                  ? node!.data.description
+                typeof node.data.description === 'string'
+                  ? node.data.description
                   : undefined,
-              status: node!.data.status,
-              emoji: node!.data.emoji,
+              status: node.data.status,
+              emoji: node.data.emoji,
             }))
         : [];
 
       const children: MindmapContextPayload['children'] = edgesRef.current
         .filter((edge) => edge.source === nodeId)
-        .slice(0, CHILD_LIMIT)
         .map((edge) => nodesRef.current.find((node) => node.id === edge.target))
-        .filter(Boolean)
+        .filter(
+          (node): node is MindmapNode =>
+            Boolean(node) && node.data?.variant !== 'edge-note',
+        )
+        .slice(0, CHILD_LIMIT)
         .map((node) => ({
-          id: node!.id,
-          label: node!.data.label,
+          id: node.id,
+          label: node.data.label,
           description:
-            typeof node!.data.description === 'string'
-              ? node!.data.description
+            typeof node.data.description === 'string'
+              ? node.data.description
               : undefined,
-          status: node!.data.status,
-          emoji: node!.data.emoji,
+          status: node.data.status,
+          emoji: node.data.emoji,
         }));
 
       const recentMessages = (aiConversations[nodeId] ?? [])
@@ -3535,8 +3558,9 @@ const MindmapMasterFlow = () => {
     };
 
     const handleToggleNoteCollapsed = (event: Event) => {
-      const detail = (event as CustomEvent<{ nodeId: string; collapsed: boolean }>)
-        .detail;
+      const detail = (
+        event as CustomEvent<{ nodeId: string; collapsed: boolean }>
+      ).detail;
       if (!detail?.nodeId) {
         return;
       }
@@ -3562,7 +3586,10 @@ const MindmapMasterFlow = () => {
         handleUpdateDescription,
       );
       window.removeEventListener('update-node-status', handleUpdateStatus);
-      window.removeEventListener('update-note-content', handleUpdateNoteContent);
+      window.removeEventListener(
+        'update-note-content',
+        handleUpdateNoteContent,
+      );
       window.removeEventListener(
         'toggle-note-collapsed',
         handleToggleNoteCollapsed,
