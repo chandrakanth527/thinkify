@@ -72,7 +72,7 @@ export const AIChatPanel: FC<AIChatPanelProps> = ({
   phase = 'idle',
 }) => {
   const [draft, setDraft] = useState('');
-  const feedRef = useRef<HTMLDivElement | null>(null);
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     setDraft('');
@@ -119,11 +119,11 @@ export const AIChatPanel: FC<AIChatPanelProps> = ({
   };
 
   useEffect(() => {
-    if (!isOpen || !feedRef.current) {
+    if (!isOpen || !scrollContainerRef.current) {
       return;
     }
 
-    const element = feedRef.current;
+    const element = scrollContainerRef.current;
     // Scroll to the bottom so the latest message is visible
     requestAnimationFrame(() => {
       element.scrollTop = element.scrollHeight;
@@ -165,7 +165,7 @@ export const AIChatPanel: FC<AIChatPanelProps> = ({
         </button>
       </header>
 
-      <div className="ai-chat-scroll">
+      <div className="ai-chat-scroll" ref={scrollContainerRef}>
         <section className="ai-chat-node-summary">
         {hasNode ? (
           <div className="ai-chat-node-card">
@@ -218,7 +218,7 @@ export const AIChatPanel: FC<AIChatPanelProps> = ({
           </section>
         ) : null}
 
-        <section className="ai-chat-feed" ref={feedRef}>
+        <section className="ai-chat-feed">
           {phase === 'loading' && (
             <div className="ai-chat-message loading">
               <div className="ai-chat-bubble">
