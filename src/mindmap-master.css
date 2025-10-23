@@ -9,9 +9,8 @@
   min-width: 240px;
   max-width: 320px;
   padding: 18px 20px 24px;
-  font-family:
-    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu,
-    sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen,
+    Ubuntu, sans-serif;
   font-size: 15px;
   font-weight: 500;
   color: #0f172a;
@@ -25,9 +24,7 @@
   border: 1px solid rgba(148, 163, 184, 0.35);
   border-radius: 18px;
   box-shadow: 0 8px 18px rgba(15, 23, 42, 0.1);
-  transition:
-    transform 0.22s ease,
-    box-shadow 0.22s ease;
+  transition: transform 0.22s ease, box-shadow 0.22s ease;
 }
 
 .mindmap-master-node:hover {
@@ -49,12 +46,11 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
-  min-width: 260px;
-  max-width: 340px;
-  padding: 18px 18px 22px;
-  font-family:
-    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu,
-    sans-serif;
+  min-width: 240px;
+  max-width: 320px;
+  padding: 18px 20px 24px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen,
+    Ubuntu, sans-serif;
   font-size: 14px;
   background: linear-gradient(
     180deg,
@@ -64,14 +60,22 @@
   border: 1px dashed rgba(251, 191, 36, 0.65);
   border-radius: 18px;
   box-shadow: 0 8px 18px rgba(180, 83, 9, 0.12);
-  transition:
-    transform 0.22s ease,
-    box-shadow 0.22s ease;
+  transition: transform 0.22s ease, box-shadow 0.22s ease, min-width 0.22s ease, max-width 0.22s ease;
+}
+
+.edge-note-node.is-expanded {
+  min-width: 400px;
+  max-width: 600px;
 }
 
 .edge-note-node.selected {
   box-shadow: 0 16px 28px rgba(180, 83, 9, 0.18);
   transform: translateY(-2px);
+}
+
+.edge-note-node.is-collapsed {
+  padding: 18px 20px 24px;
+  gap: 0;
 }
 
 .edge-note-body {
@@ -168,13 +172,21 @@
 }
 
 .edge-note-preview {
-  padding: 8px 10px;
-  font-size: 13px;
-  line-height: 1.5;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  width: 100%;
+  padding: 3px 6px;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.35;
   color: #713f12;
   cursor: pointer;
   background: rgba(254, 243, 199, 0.6);
   border-radius: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .edge-note-editor {
@@ -184,7 +196,7 @@
 }
 
 .edge-note-render {
-  max-height: 260px;
+  max-height: 150px;
   padding: 12px 14px;
   overflow-y: auto;
   font-size: 13px;
@@ -259,8 +271,14 @@
   background: rgba(249, 115, 22, 0.45);
 }
 
+.edge-note-toolbar button.is-active {
+  background: rgba(249, 115, 22, 0.6);
+  color: #7c2d12;
+  font-weight: 700;
+}
+
 .edge-note-textarea {
-  min-height: 180px;
+  min-height: 120px;
   padding: 12px 14px;
   font-size: 13px;
   line-height: 1.5;
@@ -275,6 +293,141 @@
   outline: none;
   border-color: rgba(194, 65, 12, 0.75);
   box-shadow: 0 0 0 3px rgba(251, 146, 60, 0.35);
+}
+
+.edge-note-editable {
+  min-height: 120px;
+  max-height: 300px;
+  padding: 12px 14px;
+  overflow-y: auto;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #422006;
+  background: rgba(255, 248, 237, 0.9);
+  border: 1px solid rgba(217, 119, 6, 0.35);
+  border-radius: 12px;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.edge-note-editable:focus {
+  outline: none;
+  border-color: rgba(194, 65, 12, 0.75);
+  box-shadow: 0 0 0 3px rgba(251, 146, 60, 0.35);
+}
+
+.edge-note-editable h2,
+.edge-note-editable h3 {
+  margin: 8px 0;
+  color: #7c2d12;
+}
+
+.edge-note-editable p {
+  margin: 8px 0;
+}
+
+.edge-note-editable ul,
+.edge-note-editable ol {
+  margin: 8px 0 8px 18px;
+  padding-left: 0;
+}
+
+.edge-note-editable blockquote {
+  padding-left: 10px;
+  margin: 8px 0;
+  font-style: italic;
+  color: #854d0e;
+  border-left: 3px solid rgba(217, 119, 6, 0.35);
+}
+
+.edge-note-editable li {
+  margin-bottom: 4px;
+}
+
+.edge-note-editable strong,
+.edge-note-editable b {
+  font-weight: 700;
+}
+
+.edge-note-editable em,
+.edge-note-editable i {
+  font-style: italic;
+}
+
+/* TipTap editor styles */
+.ProseMirror {
+  min-height: 120px;
+  max-height: 300px;
+  padding: 12px 14px;
+  overflow-y: auto;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #422006;
+  background: rgba(255, 248, 237, 0.9);
+  border: 1px solid rgba(217, 119, 6, 0.35);
+  border-radius: 12px;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.ProseMirror:focus {
+  outline: none;
+  border-color: rgba(194, 65, 12, 0.75);
+  box-shadow: 0 0 0 3px rgba(251, 146, 60, 0.35);
+}
+
+.ProseMirror h2,
+.ProseMirror h3 {
+  margin: 8px 0;
+  color: #7c2d12;
+}
+
+.ProseMirror h2 {
+  font-size: 1.2em;
+  font-weight: 700;
+}
+
+.ProseMirror h3 {
+  font-size: 1.1em;
+  font-weight: 600;
+}
+
+.ProseMirror p {
+  margin: 8px 0;
+}
+
+.ProseMirror ul,
+.ProseMirror ol {
+  margin: 8px 0 8px 18px;
+  padding-left: 0;
+}
+
+.ProseMirror li {
+  margin-bottom: 4px;
+}
+
+.ProseMirror blockquote {
+  padding-left: 10px;
+  margin: 8px 0;
+  font-style: italic;
+  color: #854d0e;
+  border-left: 3px solid rgba(217, 119, 6, 0.35);
+}
+
+.ProseMirror strong,
+.ProseMirror b {
+  font-weight: 700;
+}
+
+.ProseMirror em,
+.ProseMirror i {
+  font-style: italic;
+}
+
+.ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  color: #9ca3af;
+  pointer-events: none;
 }
 
 /* Level-specific sizes */
@@ -495,9 +648,7 @@
   border-radius: 50%;
   box-shadow: 0 10px 22px rgba(37, 99, 235, 0.3);
   transform: translateY(-50%);
-  transition:
-    transform 0.18s ease,
-    box-shadow 0.18s ease;
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
 }
 
 .mindmap-master-node:hover .node-add-btn,
@@ -530,8 +681,7 @@
   pointer-events: none;
   background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
   border-radius: 50%;
-  box-shadow:
-    0 10px 24px rgba(15, 23, 42, 0.35),
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.35),
     0 4px 10px rgba(15, 23, 42, 0.22);
 }
 
@@ -544,9 +694,7 @@
   padding: 12px;
   background: white;
   border-radius: 16px;
-  box-shadow:
-    0 8px 24px rgba(0, 0, 0, 0.12),
-    0 2px 8px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.08);
 }
 
 .toolbar-section {
@@ -668,8 +816,7 @@
   background: rgba(255, 255, 255, 0.96);
   border: 1px solid rgba(226, 232, 240, 0.8);
   border-radius: 14px;
-  box-shadow:
-    0 12px 30px rgba(15, 23, 42, 0.15),
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.15),
     0 2px 8px rgba(15, 23, 42, 0.08);
   backdrop-filter: blur(8px);
 }
@@ -700,8 +847,7 @@
   background: white;
   border: 1px solid #e2e8f0;
   border-radius: 14px;
-  box-shadow:
-    0 16px 32px rgba(15, 23, 42, 0.18),
+  box-shadow: 0 16px 32px rgba(15, 23, 42, 0.18),
     0 4px 12px rgba(15, 23, 42, 0.12);
   transform: translateX(-50%);
 }
@@ -734,9 +880,7 @@
   background: transparent;
   border: none;
   border-radius: 10px;
-  transition:
-    background 0.18s ease,
-    transform 0.18s ease;
+  transition: background 0.18s ease, transform 0.18s ease;
 }
 
 .status-option:hover {
@@ -1122,9 +1266,7 @@
   background: rgba(219, 234, 254, 0.9);
   border: 1px solid rgba(191, 219, 254, 0.95);
   border-radius: 999px;
-  transition:
-    transform 0.18s ease,
-    box-shadow 0.18s ease;
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
 }
 
 .ai-chat-chip:hover:not(:disabled) {
@@ -1378,10 +1520,7 @@
   background: transparent;
   border: none;
   border-radius: 999px;
-  transition:
-    background 0.18s ease,
-    color 0.18s ease,
-    box-shadow 0.18s ease;
+  transition: background 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
 }
 
 .ai-chat-mode-btn:hover {
@@ -1438,9 +1577,7 @@
   background: transparent;
   border: none;
   border-radius: 10px;
-  transition:
-    background 0.18s ease,
-    transform 0.18s ease;
+  transition: background 0.18s ease, transform 0.18s ease;
 }
 
 .ai-toolbar-menu-item:hover {
@@ -1513,9 +1650,7 @@
   background: rgba(248, 250, 252, 0.85);
   border: 1px solid rgba(148, 163, 184, 0.6);
   border-radius: 12px;
-  transition:
-    border-color 0.18s ease,
-    box-shadow 0.18s ease;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
 }
 
 .ai-chat-textarea:focus {
@@ -1550,9 +1685,7 @@
   background: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%);
   border: none;
   border-radius: 12px;
-  transition:
-    transform 0.18s ease,
-    box-shadow 0.18s ease;
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
 }
 
 .ai-chat-run:disabled {

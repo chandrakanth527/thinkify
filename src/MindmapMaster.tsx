@@ -1,5 +1,9 @@
-import '@xyflow/react/dist/style.css';
-import './mindmap-master.css';
+import "@xyflow/react/dist/style.css";
+import "./mindmap-master.css";
+
+import { useEditor, EditorContent } from '@tiptap/react';
+import StarterKit from '@tiptap/starter-kit';
+import Placeholder from '@tiptap/extension-placeholder';
 
 import {
   Background,
@@ -20,7 +24,7 @@ import {
   useReactFlow,
   useStore,
   useUpdateNodeInternals,
-} from '@xyflow/react';
+} from "@xyflow/react";
 import {
   type CSSProperties,
   type ReactNode,
@@ -29,10 +33,10 @@ import {
   useMemo,
   useRef,
   useState,
-} from 'react';
+} from "react";
 
-import { generateMindmapSuggestions, MindmapAiError } from '@/ai/client';
-import type { MindmapAiSuggestion, MindmapContextPayload } from '@/ai/types';
+import { generateMindmapSuggestions, MindmapAiError } from "@/ai/client";
+import type { MindmapAiSuggestion, MindmapContextPayload } from "@/ai/types";
 import {
   AIChatPanel,
   type AIChatPanelMessage,
@@ -40,7 +44,7 @@ import {
   type AIChatPanelPhase,
   type AIChatPanelQuickAction,
   type AIIntent,
-} from '@/components/AIChatPanel';
+} from "@/components/AIChatPanel";
 import {
   IconCollapse,
   IconDownload,
@@ -56,7 +60,7 @@ import {
   IconTrash,
   IconUndo,
   IconUpload,
-} from '@/icons';
+} from "@/icons";
 
 // ==================== TYPES ====================
 
@@ -67,74 +71,76 @@ interface MindmapNodeData extends Record<string, unknown> {
   emoji?: string;
   collapsed?: boolean;
   hiddenChildCount?: number;
-  variant?: 'topic' | 'edge-note';
+  variant?: "topic" | "edge-note";
   noteContent?: string;
   noteCollapsed?: boolean;
 
   // AI Planning fields
   description?: string;
-  status?: 'not-started' | 'in-progress' | 'completed' | 'blocked';
+  status?: "not-started" | "in-progress" | "completed" | "blocked";
 }
 
-type MindmapNode = Node<MindmapNodeData, 'mindmap'>;
+type MindmapNode = Node<MindmapNodeData, "mindmap" | "edge-note"> & {
+  positionAbsolute?: { x: number; y: number };
+};
 type MindmapEdge = Edge;
 
 // ==================== CONSTANTS ====================
 
 const COLORS = [
-  { name: 'Lavender', value: '#B4A7D6' },
-  { name: 'Peach', value: '#FFB5A7' },
-  { name: 'Mint', value: '#B8E6D5' },
-  { name: 'Sky', value: '#A8D8EA' },
-  { name: 'Blush', value: '#F8B4D9' },
-  { name: 'Lemon', value: '#FFF4A3' },
-  { name: 'Coral', value: '#FFCAB0' },
-  { name: 'Sage', value: '#C5E1A5' },
-  { name: 'Periwinkle', value: '#C5CAE9' },
-  { name: 'Rose', value: '#F8BBD0' },
+  { name: "Lavender", value: "#B4A7D6" },
+  { name: "Peach", value: "#FFB5A7" },
+  { name: "Mint", value: "#B8E6D5" },
+  { name: "Sky", value: "#A8D8EA" },
+  { name: "Blush", value: "#F8B4D9" },
+  { name: "Lemon", value: "#FFF4A3" },
+  { name: "Coral", value: "#FFCAB0" },
+  { name: "Sage", value: "#C5E1A5" },
+  { name: "Periwinkle", value: "#C5CAE9" },
+  { name: "Rose", value: "#F8BBD0" },
 ];
 
-const EMOJIS = ['💡', '⭐', '🎯', '🚀', '💎', '🔥', '✨', '🎨', '📌', '🏆'];
+const EMOJIS = ["💡", "⭐", "🎯", "🚀", "💎", "🔥", "✨", "🎨", "📌", "🏆"];
 
 const STATUS_OPTIONS = [
   {
-    value: 'not-started',
-    icon: '○',
-    label: 'Not Started',
-    color: '#64748b',
-    bg: 'rgba(100, 116, 139, 0.16)',
+    value: "not-started",
+    icon: "○",
+    label: "Not Started",
+    color: "#64748b",
+    bg: "rgba(100, 116, 139, 0.16)",
   },
   {
-    value: 'in-progress',
-    icon: '◐',
-    label: 'In Progress',
-    color: '#2563eb',
-    bg: 'rgba(37, 99, 235, 0.16)',
+    value: "in-progress",
+    icon: "◐",
+    label: "In Progress",
+    color: "#2563eb",
+    bg: "rgba(37, 99, 235, 0.16)",
   },
   {
-    value: 'completed',
-    icon: '●',
-    label: 'Completed',
-    color: '#16a34a',
-    bg: 'rgba(22, 163, 74, 0.16)',
+    value: "completed",
+    icon: "●",
+    label: "Completed",
+    color: "#16a34a",
+    bg: "rgba(22, 163, 74, 0.16)",
   },
   {
-    value: 'blocked',
-    icon: '✕',
-    label: 'Blocked',
-    color: '#ef4444',
-    bg: 'rgba(239, 68, 68, 0.16)',
+    value: "blocked",
+    icon: "✕",
+    label: "Blocked",
+    color: "#ef4444",
+    bg: "rgba(239, 68, 68, 0.16)",
   },
 ] as const;
 
-type StatusValue = (typeof STATUS_OPTIONS)[number]['value'];
+type StatusValue = (typeof STATUS_OPTIONS)[number]["value"];
 
-const normalizeStatus = (value?: MindmapNodeData['status']): StatusValue =>
+const normalizeStatus = (value?: MindmapNodeData["status"]): StatusValue =>
   (STATUS_OPTIONS.find((option) => option.value === value)?.value ??
-    'not-started') as StatusValue;
+    "not-started") as StatusValue;
 
-const FLOW_STORAGE_KEY = 'mindmap-flow-state.v1';
-const AI_CONVERSATION_STORAGE_KEY = 'mindmap-ai-conversations.v1';
+const FLOW_STORAGE_KEY = "mindmap-flow-state.v1";
+const AI_CONVERSATION_STORAGE_KEY = "mindmap-ai-conversations.v1";
 
 const AI_INTENT_META: Record<
   AIIntent,
@@ -149,72 +155,74 @@ const AI_INTENT_META: Record<
   }
 > = {
   spark: {
-    label: 'Spark Ideas',
-    tagline: 'Generate alternative ideas or answers for this node.',
-    addLabel: 'Add ideas',
-    replaceLabel: 'Replace ideas',
+    label: "Spark Ideas",
+    tagline: "Generate alternative ideas or answers for this node.",
+    addLabel: "Add ideas",
+    replaceLabel: "Replace ideas",
     placeholder: (nodeLabel) =>
       nodeLabel
         ? `Ask for fresh ideas for “${nodeLabel}”…`
-        : 'Ask for fresh ideas…',
-    quickHint: 'Choose a shortcut to brainstorm new ideas instantly.',
+        : "Ask for fresh ideas…",
+    quickHint: "Choose a shortcut to brainstorm new ideas instantly.",
     quickActions: [
       {
-        id: 'children',
-        label: 'Fresh ideas',
-        description: 'Suggest a handful of candidate ideas for this topic.',
+        id: "children",
+        label: "Fresh ideas",
+        description: "Suggest a handful of candidate ideas for this topic.",
       },
       {
-        id: 'expand',
-        label: 'Different angles',
-        description: 'Explore alternative perspectives or niches to consider.',
+        id: "expand",
+        label: "Different angles",
+        description: "Explore alternative perspectives or niches to consider.",
       },
       {
-        id: 'replace',
-        label: 'Reimagine ideas',
-        description: 'Swap current ideas for a refreshed, more varied batch.',
+        id: "replace",
+        label: "Reimagine ideas",
+        description: "Swap current ideas for a refreshed, more varied batch.",
       },
     ],
   },
   deepen: {
-    label: 'Deepen Structure',
-    tagline: 'Break the node into research areas, tasks, or subtopics.',
-    addLabel: 'Add subtopics',
-    replaceLabel: 'Replace subtopics',
+    label: "Deepen Structure",
+    tagline: "Break the node into research areas, tasks, or subtopics.",
+    addLabel: "Add subtopics",
+    replaceLabel: "Replace subtopics",
     placeholder: (nodeLabel) =>
       nodeLabel
         ? `Ask how to deepen “${nodeLabel}”…`
-        : 'Ask how to deepen this branch…',
-    quickHint: 'Pick a shortcut to outline research steps or supporting tasks.',
+        : "Ask how to deepen this branch…",
+    quickHint: "Pick a shortcut to outline research steps or supporting tasks.",
     quickActions: [
       {
-        id: 'children',
-        label: 'Core subtopics',
+        id: "children",
+        label: "Core subtopics",
         description:
-          'Outline the foundational subtopics that should live here.',
+          "Outline the foundational subtopics that should live here.",
       },
       {
-        id: 'expand',
-        label: 'Research plan',
-        description: 'List research tasks, experiments, or analyses to run.',
+        id: "expand",
+        label: "Research plan",
+        description: "List research tasks, experiments, or analyses to run.",
       },
       {
-        id: 'replace',
-        label: 'Rebuild branch',
-        description: 'Replace existing subtopics with a stronger structure.',
+        id: "replace",
+        label: "Rebuild branch",
+        description: "Replace existing subtopics with a stronger structure.",
       },
     ],
   },
 };
 
 interface StoredAIMessage extends AIChatPanelMessage {
-  kind?: 'manual' | 'quick' | 'ai';
+  kind?: "manual" | "quick" | "ai";
   suggestion?: MindmapAiSuggestion;
   intent?: AIIntent;
 }
 
 const createMessageId = (prefix: string) =>
-  `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+  `${prefix}-${Date.now().toString(36)}-${Math.random()
+    .toString(36)
+    .slice(2, 7)}`;
 
 interface StoredFlowState {
   nodes: MindmapNode[];
@@ -317,13 +325,13 @@ const cloneEdgesForHistory = (edges: MindmapEdge[]): MindmapEdge[] =>
   }));
 
 const hexToRgba = (hex: string, alpha: number): string => {
-  const sanitized = hex.replace('#', '');
+  const sanitized = hex.replace("#", "");
   const expanded =
     sanitized.length === 3
       ? sanitized
-          .split('')
+          .split("")
           .map((char) => char + char)
-          .join('')
+          .join("")
       : sanitized;
 
   if (expanded.length !== 6) {
@@ -342,9 +350,9 @@ const hexToRgba = (hex: string, alpha: number): string => {
 };
 
 type MarkdownBlock =
-  | { type: 'h2' | 'h3' | 'p' | 'blockquote'; text: string }
-  | { type: 'ul' | 'ol'; items: string[] }
-  | { type: 'spacer' };
+  | { type: "h2" | "h3" | "p" | "blockquote"; text: string }
+  | { type: "ul" | "ol"; items: string[] }
+  | { type: "spacer" };
 
 const renderInlineNodes = (text: string): ReactNode[] => {
   const nodes: ReactNode[] = [];
@@ -359,21 +367,21 @@ const renderInlineNodes = (text: string): ReactNode[] => {
 
     const token = match[0];
     const inner =
-      token.startsWith('**') || token.startsWith('__')
+      token.startsWith("**") || token.startsWith("__")
         ? token.slice(2, -2)
         : token.slice(1, -1);
     const children = renderInlineNodes(inner);
     const key = `${match.index}-${token.length}`;
 
-    if (token.startsWith('**') || token.startsWith('__')) {
+    if (token.startsWith("**") || token.startsWith("__")) {
       nodes.push(
         <strong key={`strong-${key}`}>
           {children.length ? children : inner}
-        </strong>,
+        </strong>
       );
     } else {
       nodes.push(
-        <em key={`em-${key}`}>{children.length ? children : inner}</em>,
+        <em key={`em-${key}`}>{children.length ? children : inner}</em>
       );
     }
 
@@ -389,9 +397,9 @@ const renderInlineNodes = (text: string): ReactNode[] => {
 };
 
 const parseMarkdownBlocks = (input: string): MarkdownBlock[] => {
-  const lines = input.replace(/\r?\n/g, '\n').split('\n');
+  const lines = input.replace(/\r?\n/g, "\n").split("\n");
   const blocks: MarkdownBlock[] = [];
-  let currentList: { type: 'ul' | 'ol'; items: string[] } | null = null;
+  let currentList: { type: "ul" | "ol"; items: string[] } | null = null;
 
   const flushList = () => {
     if (currentList) {
@@ -405,35 +413,35 @@ const parseMarkdownBlocks = (input: string): MarkdownBlock[] => {
     if (!trimmed) {
       flushList();
       const last = blocks[blocks.length - 1];
-      if (!last || last.type !== 'spacer') {
-        blocks.push({ type: 'spacer' });
+      if (!last || last.type !== "spacer") {
+        blocks.push({ type: "spacer" });
       }
       return;
     }
 
-    if (trimmed.startsWith('### ')) {
+    if (trimmed.startsWith("### ")) {
       flushList();
-      blocks.push({ type: 'h3', text: trimmed.slice(4) });
+      blocks.push({ type: "h3", text: trimmed.slice(4) });
       return;
     }
 
-    if (trimmed.startsWith('## ')) {
+    if (trimmed.startsWith("## ")) {
       flushList();
-      blocks.push({ type: 'h2', text: trimmed.slice(3) });
+      blocks.push({ type: "h2", text: trimmed.slice(3) });
       return;
     }
 
-    if (trimmed.startsWith('> ')) {
+    if (trimmed.startsWith("> ")) {
       flushList();
-      blocks.push({ type: 'blockquote', text: trimmed.slice(2) });
+      blocks.push({ type: "blockquote", text: trimmed.slice(2) });
       return;
     }
 
     const olMatch = trimmed.match(/^(\d+)\.\s+(.*)$/);
     if (olMatch) {
-      if (!currentList || currentList.type !== 'ol') {
+      if (!currentList || currentList.type !== "ol") {
         flushList();
-        currentList = { type: 'ol', items: [] };
+        currentList = { type: "ol", items: [] };
       }
       currentList.items.push(olMatch[2]);
       return;
@@ -441,21 +449,21 @@ const parseMarkdownBlocks = (input: string): MarkdownBlock[] => {
 
     const ulMatch = trimmed.match(/^[-*]\s+(.*)$/);
     if (ulMatch) {
-      if (!currentList || currentList.type !== 'ul') {
+      if (!currentList || currentList.type !== "ul") {
         flushList();
-        currentList = { type: 'ul', items: [] };
+        currentList = { type: "ul", items: [] };
       }
       currentList.items.push(ulMatch[1]);
       return;
     }
 
     flushList();
-    blocks.push({ type: 'p', text: trimmed });
+    blocks.push({ type: "p", text: trimmed });
   });
 
   flushList();
 
-  if (blocks.length > 0 && blocks[blocks.length - 1].type === 'spacer') {
+  if (blocks.length > 0 && blocks[blocks.length - 1].type === "spacer") {
     blocks.pop();
   }
 
@@ -476,32 +484,32 @@ const renderEdgeNoteMarkdown = (input: string): ReactNode[] => {
 
   return blocks.map((block, index) => {
     const blockKey =
-      block.type === 'spacer'
+      block.type === "spacer"
         ? `spacer-${index}`
-        : block.type === 'ul' || block.type === 'ol'
-          ? `${block.type}-${block.items.join('|')}`
-          : `${block.type}-${block.text}`;
+        : block.type === "ul" || block.type === "ol"
+        ? `${block.type}-${block.items.join("|")}`
+        : `${block.type}-${"text" in block ? block.text : ""}`;
 
     switch (block.type) {
-      case 'h2':
+      case "h2":
         return (
           <h2 key={`block-${index}-${blockKey}`}>
             {renderInlineNodes(block.text)}
           </h2>
         );
-      case 'h3':
+      case "h3":
         return (
           <h3 key={`block-${index}-${blockKey}`}>
             {renderInlineNodes(block.text)}
           </h3>
         );
-      case 'blockquote':
+      case "blockquote":
         return (
           <blockquote key={`block-${index}-${blockKey}`}>
             {renderInlineNodes(block.text)}
           </blockquote>
         );
-      case 'ul':
+      case "ul":
         return (
           <ul key={`block-${index}-${blockKey}`}>
             {block.items.map((item, itemIndex) => (
@@ -511,7 +519,7 @@ const renderEdgeNoteMarkdown = (input: string): ReactNode[] => {
             ))}
           </ul>
         );
-      case 'ol':
+      case "ol":
         return (
           <ol key={`block-${index}-${blockKey}`}>
             {block.items.map((item, itemIndex) => (
@@ -521,14 +529,14 @@ const renderEdgeNoteMarkdown = (input: string): ReactNode[] => {
             ))}
           </ol>
         );
-      case 'spacer':
+      case "spacer":
         return (
           <div
             className="edge-note-spacer"
             key={`spacer-${index}-${blockKey}`}
           />
         );
-      case 'p':
+      case "p":
       default:
         return (
           <p key={`block-${index}-${blockKey}`}>
@@ -540,7 +548,7 @@ const renderEdgeNoteMarkdown = (input: string): ReactNode[] => {
 };
 const computeCollapseInfo = (
   nodes: MindmapNode[],
-  edges: MindmapEdge[],
+  edges: MindmapEdge[]
 ): CollapseInfo => {
   const visibleIds = new Set<string>();
   const hiddenChildCount = new Map<string, number>();
@@ -578,11 +586,116 @@ const computeCollapseInfo = (
   return { visibleIds, hiddenChildCount };
 };
 
+// Hierarchical tree layout - positions nodes based on parent-child relationships
+const getLayoutedElements = (
+  nodes: MindmapNode[],
+  edges: MindmapEdge[]
+): { nodes: MindmapNode[]; edges: MindmapEdge[] } => {
+  // Find root node (level 0)
+  const rootNode = nodes.find((n) => n.data.level === 0);
+  if (!rootNode) return { nodes, edges };
+
+  // Build parent-child relationships
+  const childrenMap: Map<string, MindmapNode[]> = new Map();
+  edges.forEach((edge) => {
+    if (!childrenMap.has(edge.source)) {
+      childrenMap.set(edge.source, []);
+    }
+    const childNode = nodes.find((n) => n.id === edge.target);
+    if (childNode) {
+      childrenMap.get(edge.source)!.push(childNode);
+    }
+  });
+
+  const layoutedNodes: MindmapNode[] = [];
+  const startX = 100;
+  const startY = 300;
+  const horizontalSpacing = 400; // Distance between levels
+  const verticalSpacing = 150; // Distance between siblings
+
+  // Position nodes recursively
+  let currentYOffset = 0;
+
+  const positionNode = (
+    node: MindmapNode,
+    x: number,
+    yStart: number
+  ): number => {
+    const children = childrenMap.get(node.id) || [];
+
+    if (children.length === 0) {
+      // Leaf node - position at current Y offset
+      layoutedNodes.push({
+        ...node,
+        position: { x, y: yStart + currentYOffset * verticalSpacing },
+      });
+      currentYOffset += 1;
+      return yStart + (currentYOffset - 1) * verticalSpacing;
+    }
+
+    // Position all children first
+    const childYPositions: number[] = [];
+    children.forEach((child) => {
+      const childY = positionNode(child, x + horizontalSpacing, yStart);
+      childYPositions.push(childY);
+    });
+
+    // Position parent at the midpoint of children
+    const firstChildY = childYPositions[0];
+    const lastChildY = childYPositions[childYPositions.length - 1];
+    const parentY = (firstChildY + lastChildY) / 2;
+
+    layoutedNodes.push({
+      ...node,
+      position: { x, y: parentY },
+    });
+
+    return parentY;
+  };
+
+  // Start positioning from root
+  positionNode(rootNode, startX, startY);
+
+  return { nodes: layoutedNodes, edges };
+};
+
+// Apply collapse state to nodes and edges - filters out hidden nodes and their edges
+const applyCollapseState = (
+  nodes: MindmapNode[],
+  edges: MindmapEdge[],
+  collapseInfo?: CollapseInfo
+): { nodes: MindmapNode[]; edges: MindmapEdge[] } => {
+  const info = collapseInfo ?? computeCollapseInfo(nodes, edges);
+
+  // Update nodes with hidden child counts
+  const updatedNodes = nodes.map((node) => {
+    const hiddenCount = info.hiddenChildCount.get(node.id) ?? 0;
+    return {
+      ...node,
+      data: {
+        ...node.data,
+        hiddenChildCount: hiddenCount > 0 ? hiddenCount : undefined,
+      },
+    };
+  });
+
+  // Filter visible nodes and edges
+  const visibleNodes = updatedNodes.filter((node) =>
+    info.visibleIds.has(node.id)
+  );
+  const visibleEdges = edges.filter(
+    (edge) =>
+      info.visibleIds.has(edge.source) && info.visibleIds.has(edge.target)
+  );
+
+  return { nodes: visibleNodes, edges: visibleEdges };
+};
+
 // ==================== MINDMAP NODE COMPONENT ====================
 
 const MindmapNodeComponent = ({ data, id, selected }: any) => {
   const [label, setLabel] = useState(data.label);
-  const [description, setDescription] = useState(data.description || '');
+  const [description, setDescription] = useState(data.description || "");
   const [isExpanded, setIsExpanded] = useState(Boolean(selected));
   const [isTitleFocused, setIsTitleFocused] = useState(false);
   const [isDescriptionFocused, setIsDescriptionFocused] = useState(false);
@@ -604,7 +717,7 @@ const MindmapNodeComponent = ({ data, id, selected }: any) => {
 
   useEffect(() => {
     if (!isDescriptionFocused) {
-      setDescription(data.description || '');
+      setDescription(data.description || "");
     }
   }, [data.description, isDescriptionFocused]);
 
@@ -626,9 +739,9 @@ const MindmapNodeComponent = ({ data, id, selected }: any) => {
     }
 
     window.dispatchEvent(
-      new CustomEvent('update-node-label', {
+      new CustomEvent("update-node-label", {
         detail: { id, label: trimmed },
-      }),
+      })
     );
     emitResize();
   };
@@ -636,21 +749,21 @@ const MindmapNodeComponent = ({ data, id, selected }: any) => {
   const commitDescription = () => {
     const next = description.trim();
     window.dispatchEvent(
-      new CustomEvent('update-node-description', {
+      new CustomEvent("update-node-description", {
         detail: { id, description: next },
-      }),
+      })
     );
     emitResize();
   };
 
   const handleTitleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === 'Enter') {
+    if (event.key === "Enter") {
       event.preventDefault();
       commitLabel();
       inputRef.current?.blur();
     }
 
-    if (event.key === 'Escape') {
+    if (event.key === "Escape") {
       event.preventDefault();
       setLabel(data.label);
       inputRef.current?.blur();
@@ -658,15 +771,15 @@ const MindmapNodeComponent = ({ data, id, selected }: any) => {
   };
 
   const handleDescriptionKeyDown = (
-    event: React.KeyboardEvent<HTMLTextAreaElement>,
+    event: React.KeyboardEvent<HTMLTextAreaElement>
   ) => {
-    if (event.key === 'Escape') {
+    if (event.key === "Escape") {
       event.preventDefault();
-      setDescription(data.description || '');
+      setDescription(data.description || "");
       descriptionRef.current?.blur();
     }
 
-    if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+    if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
       event.preventDefault();
       commitDescription();
       descriptionRef.current?.blur();
@@ -675,7 +788,7 @@ const MindmapNodeComponent = ({ data, id, selected }: any) => {
 
   const statusMeta =
     STATUS_OPTIONS.find(
-      (option) => option.value === normalizeStatus(data.status),
+      (option) => option.value === normalizeStatus(data.status)
     ) ?? STATUS_OPTIONS[0];
   const accentTint = hexToRgba(data.color || statusMeta.color, 0.16);
   const borderTint = hexToRgba(statusMeta.color, 0.35);
@@ -683,9 +796,9 @@ const MindmapNodeComponent = ({ data, id, selected }: any) => {
 
   const emitNodeFocus = useCallback(() => {
     window.dispatchEvent(
-      new CustomEvent('focus-node', {
+      new CustomEvent("focus-node", {
         detail: { nodeId: id },
-      }),
+      })
     );
   }, [id]);
 
@@ -695,16 +808,16 @@ const MindmapNodeComponent = ({ data, id, selected }: any) => {
     background: `linear-gradient(180deg, ${accentTint} 0%, #ffffff 85%)`,
     border: `1px solid ${borderTint}`,
     boxShadow: selected
-      ? '0 18px 36px rgba(15, 23, 42, 0.18)'
-      : '0 8px 18px rgba(15, 23, 42, 0.1)',
-    '--node-status-color': statusMeta.color,
-    '--node-status-bg': statusMeta.bg,
-    '--node-focus-ring': focusRing,
+      ? "0 18px 36px rgba(15, 23, 42, 0.18)"
+      : "0 8px 18px rgba(15, 23, 42, 0.1)",
+    "--node-status-color": statusMeta.color,
+    "--node-status-bg": statusMeta.bg,
+    "--node-focus-ring": focusRing,
   } as React.CSSProperties;
 
   return (
     <div
-      className={`${nodeClass} ${selected ? 'selected' : ''}`}
+      className={`${nodeClass} ${selected ? "selected" : ""}`}
       ref={nodeRef}
       style={style}
     >
@@ -825,7 +938,7 @@ const MindmapNodeComponent = ({ data, id, selected }: any) => {
         className="node-add-btn"
         onClick={() =>
           window.dispatchEvent(
-            new CustomEvent('add-child', { detail: { parentId: id } }),
+            new CustomEvent("add-child", { detail: { parentId: id } })
           )
         }
         onPointerDown={(event) => event.stopPropagation()}
@@ -838,7 +951,9 @@ const MindmapNodeComponent = ({ data, id, selected }: any) => {
       {data.hiddenChildCount ? (
         <div
           className="node-collapse-count"
-          title={`${data.hiddenChildCount} hidden child${data.hiddenChildCount === 1 ? '' : 'ren'}`}
+          title={`${data.hiddenChildCount} hidden child${
+            data.hiddenChildCount === 1 ? "" : "ren"
+          }`}
         >
           {data.hiddenChildCount}
         </div>
@@ -848,30 +963,31 @@ const MindmapNodeComponent = ({ data, id, selected }: any) => {
 };
 
 const EdgeNoteNodeComponent = ({ data, id, selected }: any) => {
-  const [label, setLabel] = useState(data.label ?? 'Content Note');
+  const [label, setLabel] = useState(data.label ?? "Content Note");
   const [isEditingTitle, setIsEditingTitle] = useState(false);
-  const [content, setContent] = useState<string>(data.noteContent ?? '');
+  const [content, setContent] = useState<string>(data.noteContent ?? "");
   const [isCollapsed, setIsCollapsed] = useState<boolean>(
-    typeof data.noteCollapsed === 'boolean' ? data.noteCollapsed : false,
+    typeof data.noteCollapsed === "boolean" ? data.noteCollapsed : false
   );
   const [isEditingMarkdown, setIsEditingMarkdown] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
+  const editableRef = useRef<HTMLDivElement>(null);
   const updateNodeInternals = useUpdateNodeInternals();
   const leftHandleId = `${id}-left`;
   const rightHandleId = `${id}-right`;
 
   useEffect(() => {
-    setLabel(data.label ?? 'Content Note');
+    setLabel(data.label ?? "Content Note");
   }, [data.label]);
 
   useEffect(() => {
-    setContent(data.noteContent ?? '');
+    setContent(data.noteContent ?? "");
   }, [data.noteContent]);
 
   useEffect(() => {
     setIsCollapsed(
-      typeof data.noteCollapsed === 'boolean' ? data.noteCollapsed : false,
+      typeof data.noteCollapsed === "boolean" ? data.noteCollapsed : false
     );
   }, [data.noteCollapsed]);
 
@@ -883,60 +999,67 @@ const EdgeNoteNodeComponent = ({ data, id, selected }: any) => {
     }
   }, [isCollapsed, isEditingMarkdown, selected]);
 
+  // Auto-collapse when clicked outside (deselected)
+  useEffect(() => {
+    if (!selected && !isCollapsed) {
+      setIsCollapsed(true);
+    }
+  }, [selected, isCollapsed]);
+
   useEffect(() => {
     updateNodeInternals(id);
   }, [id, isCollapsed, isEditingMarkdown, content, updateNodeInternals]);
 
   const emitFocus = useCallback(() => {
     window.dispatchEvent(
-      new CustomEvent('focus-node', {
+      new CustomEvent("focus-node", {
         detail: { nodeId: id },
-      }),
+      })
     );
   }, [id]);
 
   const commitTitle = useCallback(() => {
     const trimmed = label.trim();
-    const nextLabel = trimmed === '' ? (data.label ?? 'Content Note') : trimmed;
+    const nextLabel = trimmed === "" ? data.label ?? "Content Note" : trimmed;
     setLabel(nextLabel);
     setIsEditingTitle(false);
 
     if (nextLabel !== data.label) {
       window.dispatchEvent(
-        new CustomEvent('update-node-label', {
+        new CustomEvent("update-node-label", {
           detail: { id, label: nextLabel },
-        }),
+        })
       );
     }
   }, [data.label, id, label]);
 
   const handleTitleKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLInputElement>) => {
-      if (event.key === 'Enter') {
+      if (event.key === "Enter") {
         event.preventDefault();
         commitTitle();
         titleInputRef.current?.blur();
       }
 
-      if (event.key === 'Escape') {
+      if (event.key === "Escape") {
         event.preventDefault();
-        setLabel(data.label ?? 'Content Note');
+        setLabel(data.label ?? "Content Note");
         setIsEditingTitle(false);
       }
     },
-    [commitTitle, data.label],
+    [commitTitle, data.label]
   );
 
   const emitContentChange = useCallback(
     (value: string) => {
       setContent(value);
       window.dispatchEvent(
-        new CustomEvent('update-note-content', {
+        new CustomEvent("update-note-content", {
           detail: { nodeId: id, content: value },
-        }),
+        })
       );
     },
-    [id],
+    [id]
   );
 
   const toggleCollapsed = useCallback(() => {
@@ -946,9 +1069,9 @@ const EdgeNoteNodeComponent = ({ data, id, selected }: any) => {
       setIsEditingMarkdown(false);
     }
     window.dispatchEvent(
-      new CustomEvent('toggle-note-collapsed', {
+      new CustomEvent("toggle-note-collapsed", {
         detail: { nodeId: id, collapsed: next },
-      }),
+      })
     );
   }, [id, isCollapsed]);
 
@@ -957,12 +1080,12 @@ const EdgeNoteNodeComponent = ({ data, id, selected }: any) => {
       updater: (
         value: string,
         selectionStart: number,
-        selectionEnd: number,
+        selectionEnd: number
       ) => {
         text: string;
         selectionStart: number;
         selectionEnd: number;
-      },
+      }
     ) => {
       const textarea = textareaRef.current;
       if (!textarea) {
@@ -977,7 +1100,7 @@ const EdgeNoteNodeComponent = ({ data, id, selected }: any) => {
         textarea.setSelectionRange(result.selectionStart, result.selectionEnd);
       });
     },
-    [emitContentChange],
+    [emitContentChange]
   );
 
   const insertInline = useCallback(
@@ -986,8 +1109,12 @@ const EdgeNoteNodeComponent = ({ data, id, selected }: any) => {
         const selected = value.slice(start, end);
         const hasSelection = selected.length > 0;
         const replacement = hasSelection ? selected : wrap.placeholder;
-        const snippet = `${wrap.prefix}${replacement}${wrap.suffix ?? wrap.prefix}`;
-        const nextText = `${value.slice(0, start)}${snippet}${value.slice(end)}`;
+        const snippet = `${wrap.prefix}${replacement}${
+          wrap.suffix ?? wrap.prefix
+        }`;
+        const nextText = `${value.slice(0, start)}${snippet}${value.slice(
+          end
+        )}`;
         const cursorStart = hasSelection
           ? start + wrap.prefix.length
           : start + wrap.prefix.length;
@@ -1000,7 +1127,7 @@ const EdgeNoteNodeComponent = ({ data, id, selected }: any) => {
         };
       });
     },
-    [applyTextMutation],
+    [applyTextMutation]
   );
 
   const insertBlockPrefix = useCallback(
@@ -1008,9 +1135,9 @@ const EdgeNoteNodeComponent = ({ data, id, selected }: any) => {
       applyTextMutation((value, start, end) => {
         const before = value.slice(0, start);
         const after = value.slice(end);
-        const needsNewline = before.length > 0 && !before.endsWith('\n');
+        const needsNewline = before.length > 0 && !before.endsWith("\n");
         const selection = value.slice(start, end) || placeholder;
-        const block = `${needsNewline ? '\n' : ''}${prefix}${selection}`;
+        const block = `${needsNewline ? "\n" : ""}${prefix}${selection}`;
         const nextText = `${before}${block}${after}`;
         const cursorStart =
           before.length + (needsNewline ? 1 : 0) + prefix.length;
@@ -1022,26 +1149,26 @@ const EdgeNoteNodeComponent = ({ data, id, selected }: any) => {
         };
       });
     },
-    [applyTextMutation],
+    [applyTextMutation]
   );
 
   const insertList = useCallback(
-    (type: 'ul' | 'ol') => {
+    (type: "ul" | "ol") => {
       applyTextMutation((value, start, end) => {
         const before = value.slice(0, start);
         const selection = value.slice(start, end);
         const after = value.slice(end);
-        const lines = selection ? selection.split('\n') : [''];
+        const lines = selection ? selection.split("\n") : [""];
         const formatted = lines
           .map((line, index) => {
             const clean =
               line.trim() ||
-              (type === 'ol' ? `Item ${index + 1}` : 'List item');
-            return type === 'ol' ? `${index + 1}. ${clean}` : `- ${clean}`;
+              (type === "ol" ? `Item ${index + 1}` : "List item");
+            return type === "ol" ? `${index + 1}. ${clean}` : `- ${clean}`;
           })
-          .join('\n');
-        const needsNewline = before.length > 0 && !before.endsWith('\n');
-        const snippet = `${needsNewline ? '\n' : ''}${formatted}`;
+          .join("\n");
+        const needsNewline = before.length > 0 && !before.endsWith("\n");
+        const snippet = `${needsNewline ? "\n" : ""}${formatted}`;
         const nextText = `${before}${snippet}${after}`;
         const cursorStart = before.length + (needsNewline ? 1 : 0);
         const cursorEnd = cursorStart + formatted.length;
@@ -1052,59 +1179,140 @@ const EdgeNoteNodeComponent = ({ data, id, selected }: any) => {
         };
       });
     },
-    [applyTextMutation],
+    [applyTextMutation]
   );
 
   const handleFormat = useCallback(
-    (format: 'h2' | 'h3' | 'bold' | 'italic' | 'ul' | 'ol' | 'quote') => {
+    (format: "h2" | "h3" | "bold" | "italic" | "ul" | "ol" | "quote") => {
       switch (format) {
-        case 'h2':
-          insertBlockPrefix('## ', 'Heading');
+        case "h2":
+          insertBlockPrefix("## ", "Heading");
           return;
-        case 'h3':
-          insertBlockPrefix('### ', 'Subheading');
+        case "h3":
+          insertBlockPrefix("### ", "Subheading");
           return;
-        case 'bold':
+        case "bold":
           insertInline({
-            prefix: '**',
-            suffix: '**',
-            placeholder: 'bold text',
+            prefix: "**",
+            suffix: "**",
+            placeholder: "bold text",
           });
           return;
-        case 'italic':
+        case "italic":
           insertInline({
-            prefix: '_',
-            suffix: '_',
-            placeholder: 'italic text',
+            prefix: "_",
+            suffix: "_",
+            placeholder: "italic text",
           });
           return;
-        case 'ul':
-          insertList('ul');
+        case "ul":
+          insertList("ul");
           return;
-        case 'ol':
-          insertList('ol');
+        case "ol":
+          insertList("ol");
           return;
-        case 'quote':
-          insertBlockPrefix('> ', 'Quote or insight');
+        case "quote":
+          insertBlockPrefix("> ", "Quote or insight");
           return;
         default:
           return;
       }
     },
-    [insertBlockPrefix, insertInline, insertList],
+    [insertBlockPrefix, insertInline, insertList]
   );
 
   const titleClass = isEditingTitle
-    ? 'edge-note-title is-editing'
-    : 'edge-note-title';
-  const containerClass = `edge-note-node ${isCollapsed ? 'is-collapsed' : 'is-expanded'} ${selected ? 'selected' : ''}`;
-  const previewText = content.trim().length
-    ? content.trim().split('\n').slice(0, 3).join(' ').slice(0, 140)
-    : 'No content yet.';
+    ? "edge-note-title is-editing"
+    : "edge-note-title";
+  const containerClass = `edge-note-node ${
+    isCollapsed ? "is-collapsed" : "is-expanded"
+  } ${selected ? "selected" : ""}`;
   const renderedContent = useMemo(
     () => renderEdgeNoteMarkdown(content),
-    [content],
+    [content]
   );
+  // Preview shows first 2-3 blocks of rendered markdown
+  const previewContent = useMemo(() => {
+    if (!content.trim().length) {
+      return <span className="edge-note-empty">No content yet.</span>;
+    }
+    // Take first 2-3 elements from rendered content for preview
+    const previewBlocks = renderedContent.slice(0, 3);
+    return <>{previewBlocks}</>;
+  }, [renderedContent, content]);
+
+  // Helper functions for markdown conversion (must be defined before useEditor)
+  const markdownToHtml = useCallback((markdown: string): string => {
+    let html = markdown;
+
+    // Headers
+    html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+    html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
+
+    // Bold
+    html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+
+    // Italic
+    html = html.replace(/_(.+?)_/g, '<em>$1</em>');
+
+    // Blockquotes
+    html = html.replace(/^> (.+)$/gm, '<blockquote><p>$1</p></blockquote>');
+
+    // Unordered lists
+    html = html.replace(/^- (.+)$/gm, '<li>$1</li>');
+    html = html.replace(/(<li>.*?<\/li>\n?)+/gs, (match) => `<ul>${match}</ul>`);
+
+    // Ordered lists
+    html = html.replace(/^\d+\. (.+)$/gm, '<li>$1</li>');
+
+    // Paragraphs
+    html = html.split('\n\n').map(para => {
+      if (!para.trim()) return '';
+      if (para.startsWith('<')) return para;
+      return `<p>${para}</p>`;
+    }).join('');
+
+    return html;
+  }, []);
+
+  const htmlToMarkdown = useCallback((html: string): string => {
+    let markdown = html;
+
+    // Headers
+    markdown = markdown.replace(/<h2[^>]*>(.*?)<\/h2>/gi, '## $1\n\n');
+    markdown = markdown.replace(/<h3[^>]*>(.*?)<\/h3>/gi, '### $1\n\n');
+
+    // Bold
+    markdown = markdown.replace(/<strong[^>]*>(.*?)<\/strong>/gi, '**$1**');
+    markdown = markdown.replace(/<b[^>]*>(.*?)<\/b>/gi, '**$1**');
+
+    // Italic
+    markdown = markdown.replace(/<em[^>]*>(.*?)<\/em>/gi, '_$1_');
+    markdown = markdown.replace(/<i[^>]*>(.*?)<\/i>/gi, '_$1_');
+
+    // Blockquote
+    markdown = markdown.replace(/<blockquote[^>]*>(.*?)<\/blockquote>/gis, (_, content) => {
+      const cleaned = content.replace(/<p[^>]*>(.*?)<\/p>/gi, '$1');
+      return cleaned.split('\n').map((line: string) => `> ${line.trim()}`).filter((l: string) => l.trim() !== '>').join('\n') + '\n\n';
+    });
+
+    // Lists
+    markdown = markdown.replace(/<ul[^>]*>(.*?)<\/ul>/gis, (_, items) => {
+      return items.replace(/<li[^>]*>(.*?)<\/li>/gi, (_: any, item: string) => `- ${item.trim()}\n`) + '\n';
+    });
+    markdown = markdown.replace(/<ol[^>]*>(.*?)<\/ol>/gis, (_, items) => {
+      let counter = 1;
+      return items.replace(/<li[^>]*>(.*?)<\/li>/gi, (_: any, item: string) => `${counter++}. ${item.trim()}\n`) + '\n';
+    });
+
+    // Paragraphs
+    markdown = markdown.replace(/<p[^>]*>(.*?)<\/p>/gis, '$1\n\n');
+
+    // Clean up extra whitespace
+    markdown = markdown.replace(/\n{3,}/g, '\n\n');
+
+    return markdown.trim();
+  }, []);
 
   const toggleMarkdownMode = () => {
     const next = !isEditingMarkdown;
@@ -1114,33 +1322,110 @@ const EdgeNoteNodeComponent = ({ data, id, selected }: any) => {
       requestAnimationFrame(() => {
         textareaRef.current?.focus();
       });
+    } else {
+      // When switching to preview, update TipTap editor
+      if (editor) {
+        editor.commands.setContent(markdownToHtml(content));
+        editor.commands.focus();
+      }
     }
   };
 
+  // TipTap editor for WYSIWYG editing
+  const editor = useEditor({
+    extensions: [
+      StarterKit.configure({
+        heading: {
+          levels: [2, 3],
+        },
+      }),
+      Placeholder.configure({
+        placeholder: 'Start writing...',
+      }),
+    ],
+    content: markdownToHtml(content),
+    onUpdate: ({ editor }) => {
+      // Debounce the conversion to avoid interfering with editing
+      // We'll convert to markdown only when needed, not on every keystroke
+    },
+    editorProps: {
+      attributes: {
+        class: 'edge-note-editable',
+      },
+    },
+  });
+
+  // Update editor content only when switching from markdown mode
+  useEffect(() => {
+    if (editor && !isEditingMarkdown) {
+      // Only update if the markdown content actually changed from external source
+      // Don't update during normal editing to avoid disrupting TipTap's state
+      const currentHtml = editor.getHTML();
+      const newHtml = markdownToHtml(content);
+
+      // Compare without TipTap's wrapper tags to avoid false positives
+      const normalizeHtml = (html: string) => html.replace(/<\/?p>/g, '').trim();
+
+      if (normalizeHtml(currentHtml) !== normalizeHtml(newHtml)) {
+        editor.commands.setContent(newHtml);
+      }
+    }
+  }, [isEditingMarkdown]);
+
+  // Save HTML to markdown when user stops typing (debounced)
+  const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    if (!editor || isEditingMarkdown) return;
+
+    const handleUpdate = () => {
+      // Clear existing timeout
+      if (debounceTimeoutRef.current) {
+        clearTimeout(debounceTimeoutRef.current);
+      }
+
+      // Set new timeout
+      debounceTimeoutRef.current = setTimeout(() => {
+        const html = editor.getHTML();
+        const markdown = htmlToMarkdown(html);
+
+        // Only emit if content actually changed
+        if (markdown !== content) {
+          emitContentChange(markdown);
+        }
+      }, 500); // 500ms debounce
+    };
+
+    // Listen to TipTap's update event
+    editor.on('update', handleUpdate);
+
+    return () => {
+      editor.off('update', handleUpdate);
+      if (debounceTimeoutRef.current) {
+        clearTimeout(debounceTimeoutRef.current);
+      }
+    };
+  }, [editor, isEditingMarkdown, content, htmlToMarkdown, emitContentChange]);
+
   return (
-    <div className={containerClass}>
+    <div
+      className={containerClass}
+      onClick={() => {
+        if (isCollapsed) {
+          setIsCollapsed(false);
+        }
+      }}
+    >
       <Handle
         className="edge-note-handle edge-note-handle-left"
         id={leftHandleId}
         position={Position.Left}
-        style={{ top: '50%', transform: 'translateY(-50%)' }}
+        style={{ top: "50%", transform: "translateY(-50%)" }}
         type="target"
       />
 
       <div className="edge-note-body">
         <div className="edge-note-header">
-          <button
-            className="edge-note-toggle"
-            onClick={toggleCollapsed}
-            title={isCollapsed ? 'Expand editor' : 'Collapse note'}
-            type="button"
-          >
-            {isCollapsed ? (
-              <IconExpand size={16} />
-            ) : (
-              <IconCollapse size={16} />
-            )}
-          </button>
           <button
             className="edge-note-icon"
             onClick={emitFocus}
@@ -1161,12 +1446,19 @@ const EdgeNoteNodeComponent = ({ data, id, selected }: any) => {
           ) : (
             <button
               className={titleClass}
+              onClick={() => {
+                if (isCollapsed) {
+                  setIsCollapsed(false);
+                }
+              }}
               onDoubleClick={() => {
-                setIsEditingTitle(true);
-                requestAnimationFrame(() => {
-                  titleInputRef.current?.focus();
-                  titleInputRef.current?.select();
-                });
+                if (!isCollapsed) {
+                  setIsEditingTitle(true);
+                  requestAnimationFrame(() => {
+                    titleInputRef.current?.focus();
+                    titleInputRef.current?.select();
+                  });
+                }
               }}
               onPointerDown={(event) => event.stopPropagation()}
               type="button"
@@ -1174,47 +1466,44 @@ const EdgeNoteNodeComponent = ({ data, id, selected }: any) => {
               {label}
             </button>
           )}
-          <span className="edge-note-badge">Edge note</span>
-          <button
-            aria-pressed={isEditingMarkdown}
-            className={
-              isEditingMarkdown
-                ? 'edge-note-mode-btn is-active'
-                : 'edge-note-mode-btn'
-            }
-            onClick={toggleMarkdownMode}
-            type="button"
-          >
-            {isEditingMarkdown ? 'Preview' : 'Markdown'}
-          </button>
+          {!isCollapsed && (
+            <button
+              aria-pressed={isEditingMarkdown}
+              className={
+                isEditingMarkdown
+                  ? "edge-note-mode-btn is-active"
+                  : "edge-note-mode-btn"
+              }
+              onClick={toggleMarkdownMode}
+              type="button"
+            >
+              {isEditingMarkdown ? "Preview" : "Markdown"}
+            </button>
+          )}
         </div>
 
-        {isCollapsed ? (
-          <div className="edge-note-preview" onClick={toggleCollapsed}>
-            {previewText}
-          </div>
-        ) : isEditingMarkdown ? (
+        {!isCollapsed && (isEditingMarkdown ? (
           <div className="edge-note-editor" onPointerDown={emitFocus}>
             <div className="edge-note-toolbar">
-              <button onClick={() => handleFormat('h2')} type="button">
+              <button onClick={() => handleFormat("h2")} type="button">
                 H2
               </button>
-              <button onClick={() => handleFormat('h3')} type="button">
+              <button onClick={() => handleFormat("h3")} type="button">
                 H3
               </button>
-              <button onClick={() => handleFormat('bold')} type="button">
+              <button onClick={() => handleFormat("bold")} type="button">
                 **B**
               </button>
-              <button onClick={() => handleFormat('italic')} type="button">
+              <button onClick={() => handleFormat("italic")} type="button">
                 _I_
               </button>
-              <button onClick={() => handleFormat('ul')} type="button">
+              <button onClick={() => handleFormat("ul")} type="button">
                 • List
               </button>
-              <button onClick={() => handleFormat('ol')} type="button">
+              <button onClick={() => handleFormat("ol")} type="button">
                 1. List
               </button>
-              <button onClick={() => handleFormat('quote')} type="button">
+              <button onClick={() => handleFormat("quote")} type="button">
                 “ ”
               </button>
             </div>
@@ -1227,20 +1516,75 @@ const EdgeNoteNodeComponent = ({ data, id, selected }: any) => {
             />
           </div>
         ) : (
-          <div
-            className="edge-note-render"
-            onClick={() => setIsEditingMarkdown(false)}
-          >
-            {renderedContent}
+          <div className="edge-note-editor" onPointerDown={emitFocus}>
+            <div className="edge-note-toolbar">
+              <button
+                onClick={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()}
+                className={editor?.isActive('heading', { level: 2 }) ? 'is-active' : ''}
+                type="button"
+                title="Heading 2"
+              >
+                H2
+              </button>
+              <button
+                onClick={() => editor?.chain().focus().toggleHeading({ level: 3 }).run()}
+                className={editor?.isActive('heading', { level: 3 }) ? 'is-active' : ''}
+                type="button"
+                title="Heading 3"
+              >
+                H3
+              </button>
+              <button
+                onClick={() => editor?.chain().focus().toggleBold().run()}
+                className={editor?.isActive('bold') ? 'is-active' : ''}
+                type="button"
+                title="Bold (Ctrl+B)"
+              >
+                <strong>B</strong>
+              </button>
+              <button
+                onClick={() => editor?.chain().focus().toggleItalic().run()}
+                className={editor?.isActive('italic') ? 'is-active' : ''}
+                type="button"
+                title="Italic (Ctrl+I)"
+              >
+                <em>I</em>
+              </button>
+              <button
+                onClick={() => editor?.chain().focus().toggleBulletList().run()}
+                className={editor?.isActive('bulletList') ? 'is-active' : ''}
+                type="button"
+                title="Bullet List"
+              >
+                • List
+              </button>
+              <button
+                onClick={() => editor?.chain().focus().toggleOrderedList().run()}
+                className={editor?.isActive('orderedList') ? 'is-active' : ''}
+                type="button"
+                title="Numbered List"
+              >
+                1. List
+              </button>
+              <button
+                onClick={() => editor?.chain().focus().toggleBlockquote().run()}
+                className={editor?.isActive('blockquote') ? 'is-active' : ''}
+                type="button"
+                title="Quote"
+              >
+                " "
+              </button>
+            </div>
+            <EditorContent editor={editor} />
           </div>
-        )}
+        ))}
       </div>
 
       <button
         className="node-add-btn"
         onClick={() =>
           window.dispatchEvent(
-            new CustomEvent('add-child', { detail: { parentId: id } }),
+            new CustomEvent("add-child", { detail: { parentId: id } })
           )
         }
         onPointerDown={(event) => event.stopPropagation()}
@@ -1254,7 +1598,7 @@ const EdgeNoteNodeComponent = ({ data, id, selected }: any) => {
         className="edge-note-handle edge-note-handle-right"
         id={rightHandleId}
         position={Position.Right}
-        style={{ top: '50%', transform: 'translateY(-50%)' }}
+        style={{ top: "50%", transform: "translateY(-50%)" }}
         type="source"
       />
     </div>
@@ -1263,7 +1607,7 @@ const EdgeNoteNodeComponent = ({ data, id, selected }: any) => {
 
 const nodeTypes = {
   mindmap: MindmapNodeComponent,
-  'edge-note': EdgeNoteNodeComponent,
+  "edge-note": EdgeNoteNodeComponent,
 };
 
 // ==================== TOOLBAR COMPONENT ====================
@@ -1375,7 +1719,7 @@ interface NodeActionToolbarProps {
   onRunAiQuickAction: (
     nodeId: string,
     intent: AIIntent,
-    mode: 'add' | 'replace',
+    mode: "add" | "replace"
   ) => void;
   isAiActive: boolean;
 }
@@ -1387,7 +1731,7 @@ interface AiMenuProps {
   onQuickAction: (
     nodeId: string,
     intent: AIIntent,
-    mode: 'add' | 'replace',
+    mode: "add" | "replace"
   ) => void;
 }
 
@@ -1406,50 +1750,52 @@ const AiMenu = ({
     }
 
     const handlePointerDown = (event: MouseEvent) => {
-      if (!containerRef.current?.contains(event.target as Node)) {
-        setIsOpen(false);
+      if (containerRef.current && event.target instanceof globalThis.Node) {
+        if (!containerRef.current.contains(event.target)) {
+          setIsOpen(false);
+        }
       }
     };
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
+      if (event.key === "Escape") {
         setIsOpen(false);
       }
     };
 
-    document.addEventListener('mousedown', handlePointerDown);
-    document.addEventListener('keydown', handleKeyDown);
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
     return () => {
-      document.removeEventListener('mousedown', handlePointerDown);
-      document.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
     };
   }, [isOpen]);
 
   const triggerClassName = [
-    'icon-btn',
-    isActive ? 'is-active' : '',
-    isOpen ? 'is-open' : '',
+    "icon-btn",
+    isActive ? "is-active" : "",
+    isOpen ? "is-open" : "",
   ]
     .filter(Boolean)
-    .join(' ');
+    .join(" ");
 
   const handleSparkAdd = () => {
-    onQuickAction(nodeId, 'spark', 'add');
+    onQuickAction(nodeId, "spark", "add");
     setIsOpen(false);
   };
 
   const handleSparkReplace = () => {
-    onQuickAction(nodeId, 'spark', 'replace');
+    onQuickAction(nodeId, "spark", "replace");
     setIsOpen(false);
   };
 
   const handleDeepenAdd = () => {
-    onQuickAction(nodeId, 'deepen', 'add');
+    onQuickAction(nodeId, "deepen", "add");
     setIsOpen(false);
   };
 
   const handleDeepenReplace = () => {
-    onQuickAction(nodeId, 'deepen', 'replace');
+    onQuickAction(nodeId, "deepen", "replace");
     setIsOpen(false);
   };
 
@@ -1574,9 +1920,10 @@ const NodeActionToolbar = ({
   const transform = useStore((state) => state.transform);
   const storeNode = useStore(
     useCallback(
-      (state) => (node ? (state.nodeInternals?.get?.(node.id) ?? null) : null),
-      [node?.id],
-    ),
+      (state) =>
+        node ? (state as any).nodeInternals?.get?.(node.id) ?? null : null,
+      [node?.id]
+    )
   );
   const selectedNodeId = node?.id;
 
@@ -1618,7 +1965,7 @@ const NodeActionToolbar = ({
     return {
       left: viewportX + ((position?.x ?? 0) + baseWidth / 2) * zoom,
       top: viewportY + (position?.y ?? 0) * zoom,
-      '--toolbar-offset': `${(baseHeight + 16) * zoom}px`,
+      "--toolbar-offset": `${(baseHeight + 16) * zoom}px`,
     } as CSSProperties;
   }, [node, storeNode, viewportX, viewportY, zoom]);
 
@@ -1637,7 +1984,7 @@ const NodeActionToolbar = ({
         <button
           className="icon-btn"
           onClick={() => onToggleCollapse(node.id, !isCollapsed)}
-          title={isCollapsed ? 'Expand children' : 'Collapse children'}
+          title={isCollapsed ? "Expand children" : "Collapse children"}
           type="button"
         >
           {isCollapsed ? <IconExpand size={18} /> : <IconCollapse size={18} />}
@@ -1729,7 +2076,7 @@ const NodeActionToolbar = ({
               <button
                 className="emoji-option"
                 onClick={() => {
-                  onEmojiChange('');
+                  onEmojiChange("");
                   setShowEmojis(false);
                 }}
                 title="Remove emoji"
@@ -1750,18 +2097,18 @@ const NodeActionToolbar = ({
             className="icon-btn"
             onClick={() => setShowStatus((prev) => !prev)}
             style={{
-              fontSize: '14px',
-              fontWeight: 'bold',
+              fontSize: "14px",
+              fontWeight: "bold",
             }}
             title="Change status"
             type="button"
           >
-            {currentStatusMeta?.icon ?? '○'}
+            {currentStatusMeta?.icon ?? "○"}
           </button>
           {showStatus && (
             <div
               className="floating-popover status-picker"
-              style={{ minWidth: '180px' }}
+              style={{ minWidth: "180px" }}
             >
               {STATUS_OPTIONS.map((statusOption) => {
                 const isActive = node.data.status === statusOption.value;
@@ -1769,7 +2116,7 @@ const NodeActionToolbar = ({
                   <button
                     aria-pressed={isActive}
                     className={
-                      isActive ? 'active status-option' : 'status-option'
+                      isActive ? "active status-option" : "status-option"
                     }
                     key={statusOption.value}
                     onClick={() => {
@@ -1815,25 +2162,25 @@ const NodeActionToolbar = ({
 const MindmapMasterFlow = () => {
   const initialNodes: MindmapNode[] = [
     {
-      id: 'root',
-      type: 'mindmap',
+      id: "root",
+      type: "mindmap",
       position: { ...DEFAULT_VIEWPORT_CENTER },
       positionAbsolute: { ...DEFAULT_VIEWPORT_CENTER },
       data: {
-        label: 'My Mindmap',
+        label: "My Mindmap",
         level: 0,
-        variant: 'topic',
+        variant: "topic",
         color: COLORS[0].value,
         // AI Planning fields example
-        status: 'in-progress',
+        status: "in-progress",
         description:
-          'Build an AI-powered mindmap tool for structured problem-solving. This tool will help break down complex tasks into manageable pieces and track progress.',
+          "Build an AI-powered mindmap tool for structured problem-solving. This tool will help break down complex tasks into manageable pieces and track progress.",
       },
     },
   ];
 
   const savedFlow = useMemo<StoredFlowState | null>(() => {
-    if (typeof window === 'undefined') {
+    if (typeof window === "undefined") {
       return null;
     }
 
@@ -1859,9 +2206,9 @@ const MindmapMasterFlow = () => {
           }
 
           const label =
-            typeof rawNode?.data?.label === 'string'
+            typeof rawNode?.data?.label === "string"
               ? rawNode.data.label
-              : 'Untitled';
+              : "Untitled";
 
           const nodePosition = rawNode.position ?? { x: 0, y: 0 };
           const positionAbsolute =
@@ -1869,12 +2216,12 @@ const MindmapMasterFlow = () => {
 
           const rawVariant = rawNode?.data?.variant;
           const nodeType =
-            rawNode?.type === 'edge-note' || rawVariant === 'edge-note'
-              ? 'edge-note'
-              : 'mindmap';
-          const variant: MindmapNodeData['variant'] =
-            rawVariant === 'edge-note' ? 'edge-note' : 'topic';
-          const isEdgeNote = variant === 'edge-note';
+            rawNode?.type === "edge-note" || rawVariant === "edge-note"
+              ? "edge-note"
+              : "mindmap";
+          const variant: MindmapNodeData["variant"] =
+            rawVariant === "edge-note" ? "edge-note" : "topic";
+          const isEdgeNote = variant === "edge-note";
 
           const sanitized: MindmapNode = {
             ...rawNode,
@@ -1886,17 +2233,17 @@ const MindmapMasterFlow = () => {
               ...rawNode.data,
               label,
               level:
-                typeof rawNode?.data?.level === 'number'
+                typeof rawNode?.data?.level === "number"
                   ? rawNode.data.level
                   : 0,
               variant,
               noteContent: isEdgeNote
-                ? typeof rawNode?.data?.noteContent === 'string'
+                ? typeof rawNode?.data?.noteContent === "string"
                   ? rawNode.data.noteContent
-                  : ''
+                  : ""
                 : rawNode.data?.noteContent,
               noteCollapsed: isEdgeNote
-                ? typeof rawNode?.data?.noteCollapsed === 'boolean'
+                ? typeof rawNode?.data?.noteCollapsed === "boolean"
                   ? rawNode.data.noteCollapsed
                   : false
                 : rawNode.data?.noteCollapsed,
@@ -1925,10 +2272,10 @@ const MindmapMasterFlow = () => {
               rawEdge.sourceHandle ?? `${String(rawEdge.source)}-right`,
             targetHandle:
               rawEdge.targetHandle ?? `${String(rawEdge.target)}-left`,
-            type: rawEdge.type ?? 'default',
+            type: rawEdge.type ?? "default",
             data: rawEdge.data,
             style: rawEdge.style ?? {
-              stroke: '#cbd5e1',
+              stroke: "#cbd5e1",
               strokeWidth: 2.5,
             },
             animated: rawEdge.animated,
@@ -1952,23 +2299,23 @@ const MindmapMasterFlow = () => {
   const savedViewport = savedFlow?.viewport ?? null;
 
   const [nodes, setNodes, onNodesChange] = useNodesState<MindmapNode>(
-    savedFlow?.nodes?.length ? savedFlow.nodes : initialNodes,
+    savedFlow?.nodes?.length ? savedFlow.nodes : initialNodes
   );
   const [edges, setEdges, onEdgesChange] = useEdgesState<MindmapEdge>(
-    savedFlow?.edges ?? [],
+    savedFlow?.edges ?? []
   );
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [isAiPanelOpen, setAiPanelOpen] = useState(false);
   const [aiPanelNodeId, setAiPanelNodeId] = useState<string | null>(null);
-  const [aiPanelPhase, setAiPanelPhase] = useState<AIChatPanelPhase>('idle');
-  const [aiPanelMode, setAiPanelMode] = useState<AIIntent>('spark');
+  const [aiPanelPhase, setAiPanelPhase] = useState<AIChatPanelPhase>("idle");
+  const [aiPanelMode, setAiPanelMode] = useState<AIIntent>("spark");
   const [aiIntentPreference, setAiIntentPreference] = useState<
     Record<string, AIIntent>
   >({});
   const [aiConversations, setAiConversations] = useState<
     Record<string, StoredAIMessage[]>
   >(() => {
-    if (typeof window === 'undefined') {
+    if (typeof window === "undefined") {
       return {};
     }
     try {
@@ -2031,7 +2378,7 @@ const MindmapMasterFlow = () => {
   }, [transformStore]);
 
   useEffect(() => {
-    if (typeof window === 'undefined') {
+    if (typeof window === "undefined") {
       return;
     }
 
@@ -2046,12 +2393,12 @@ const MindmapMasterFlow = () => {
   }, [nodes, edges, transformStore]);
 
   useEffect(() => {
-    if (typeof window === 'undefined') {
+    if (typeof window === "undefined") {
       return;
     }
     window.localStorage.setItem(
       AI_CONVERSATION_STORAGE_KEY,
-      JSON.stringify(aiConversations),
+      JSON.stringify(aiConversations)
     );
   }, [aiConversations]);
 
@@ -2077,15 +2424,15 @@ const MindmapMasterFlow = () => {
         };
       });
     },
-    [],
+    []
   );
 
   const updateSuggestionStatus = useCallback(
     (
       nodeId: string,
       messageId: string,
-      status: MindmapAiSuggestion['status'],
-      appliedMode?: 'add' | 'replace',
+      status: MindmapAiSuggestion["status"],
+      appliedMode?: "add" | "replace"
     ) => {
       setAiConversations((prev) => {
         const entries = prev[nodeId] ?? [];
@@ -2098,7 +2445,7 @@ const MindmapMasterFlow = () => {
             suggestion: {
               ...message.suggestion,
               status,
-              appliedMode: status === 'accepted' ? appliedMode : undefined,
+              appliedMode: status === "accepted" ? appliedMode : undefined,
             },
           };
         });
@@ -2109,14 +2456,14 @@ const MindmapMasterFlow = () => {
         };
       });
     },
-    [],
+    []
   );
 
   const buildContextPayload = useCallback(
     (
       nodeId: string,
       intent: AIIntent,
-      options: { manualPrompt?: string; quickActionId?: string } = {},
+      options: { manualPrompt?: string; quickActionId?: string } = {}
     ): MindmapContextPayload | null => {
       const selected = nodesRef.current.find((node) => node.id === nodeId);
       if (!selected) {
@@ -2127,20 +2474,20 @@ const MindmapMasterFlow = () => {
       const SIBLING_LIMIT = 6;
       const CHILD_LIMIT = 6;
 
-      const lineage: MindmapContextPayload['lineage'] = [];
+      const lineage: MindmapContextPayload["lineage"] = [];
       let currentId = nodeId;
       const visited = new Set<string>();
 
       while (lineage.length < LINEAGE_LIMIT) {
         const parentEdge = edgesRef.current.find(
-          (edge) => edge.target === currentId,
+          (edge) => edge.target === currentId
         );
         if (!parentEdge) {
           break;
         }
 
         const parentNode = nodesRef.current.find(
-          (node) => node.id === parentEdge.source,
+          (node) => node.id === parentEdge.source
         );
         if (!parentNode || visited.has(parentNode.id)) {
           break;
@@ -2151,7 +2498,7 @@ const MindmapMasterFlow = () => {
           label: parentNode.data.label,
           level: parentNode.data.level,
           description:
-            typeof parentNode.data.description === 'string'
+            typeof parentNode.data.description === "string"
               ? parentNode.data.description
               : undefined,
         });
@@ -2161,28 +2508,30 @@ const MindmapMasterFlow = () => {
       }
 
       const parentEdge = edgesRef.current.find(
-        (edge) => edge.target === nodeId,
+        (edge) => edge.target === nodeId
       );
       const parentId = parentEdge?.source ?? null;
 
-      const siblings: MindmapContextPayload['siblings'] = parentId
+      const siblings: MindmapContextPayload["siblings"] = parentId
         ? edgesRef.current
             .filter(
-              (edge) => edge.source === parentId && edge.target !== nodeId,
+              (edge) => edge.source === parentId && edge.target !== nodeId
             )
             .map((edge) =>
-              nodesRef.current.find((node) => node.id === edge.target),
+              nodesRef.current.find((node) => node.id === edge.target)
             )
             .filter(
               (node): node is MindmapNode =>
-                Boolean(node) && node.data?.variant !== 'edge-note',
+                node != null &&
+                node.data != null &&
+                node.data.variant !== "edge-note"
             )
             .slice(0, SIBLING_LIMIT)
             .map((node) => ({
               id: node.id,
               label: node.data.label,
               description:
-                typeof node.data.description === 'string'
+                typeof node.data.description === "string"
                   ? node.data.description
                   : undefined,
               status: node.data.status,
@@ -2190,19 +2539,21 @@ const MindmapMasterFlow = () => {
             }))
         : [];
 
-      const children: MindmapContextPayload['children'] = edgesRef.current
+      const children: MindmapContextPayload["children"] = edgesRef.current
         .filter((edge) => edge.source === nodeId)
         .map((edge) => nodesRef.current.find((node) => node.id === edge.target))
         .filter(
           (node): node is MindmapNode =>
-            Boolean(node) && node.data?.variant !== 'edge-note',
+            node != null &&
+            node.data != null &&
+            node.data.variant !== "edge-note"
         )
         .slice(0, CHILD_LIMIT)
         .map((node) => ({
           id: node.id,
           label: node.data.label,
           description:
-            typeof node.data.description === 'string'
+            typeof node.data.description === "string"
               ? node.data.description
               : undefined,
           status: node.data.status,
@@ -2212,16 +2563,16 @@ const MindmapMasterFlow = () => {
       const recentMessages = (aiConversations[nodeId] ?? [])
         .slice(-4)
         .map((entry) => {
-          const label = entry.role === 'user' ? 'User' : 'Assistant';
+          const label = entry.role === "user" ? "User" : "Assistant";
           return `${label}: ${entry.content}`;
         })
-        .join('\n');
+        .join("\n");
 
       return {
         selectedNodeId: selected.id,
         selectedLabel: selected.data.label,
         selectedDescription:
-          typeof selected.data.description === 'string'
+          typeof selected.data.description === "string"
             ? selected.data.description
             : undefined,
         selectedLevel: selected.data.level,
@@ -2234,7 +2585,7 @@ const MindmapMasterFlow = () => {
         intent,
       };
     },
-    [aiConversations],
+    [aiConversations]
   );
 
   const resolveIntentForNode = useCallback(
@@ -2245,11 +2596,11 @@ const MindmapMasterFlow = () => {
       }
 
       const hasChildren = edgesRef.current.some(
-        (edge) => edge.source === nodeId,
+        (edge) => edge.source === nodeId
       );
-      return hasChildren ? 'deepen' : 'spark';
+      return hasChildren ? "deepen" : "spark";
     },
-    [aiIntentPreference],
+    [aiIntentPreference]
   );
 
   useEffect(() => {
@@ -2268,7 +2619,7 @@ const MindmapMasterFlow = () => {
       setAiPanelMode(nextIntent);
       setAiIntentPreference((prev) => ({ ...prev, [nodeId]: nextIntent }));
     },
-    [resolveIntentForNode],
+    [resolveIntentForNode]
   );
 
   const closeAiPanel = useCallback(() => {
@@ -2296,7 +2647,7 @@ const MindmapMasterFlow = () => {
       const primary = selection[selection.length - 1];
       setSelectedNodeId(primary.id);
     },
-    [],
+    []
   );
 
   const pushHistory = useCallback(
@@ -2312,7 +2663,7 @@ const MindmapMasterFlow = () => {
       historyIndexRef.current = trimmed.length - 1;
       syncHistoryMeta();
     },
-    [syncHistoryMeta],
+    [syncHistoryMeta]
   );
 
   const restoreSnapshot = useCallback(
@@ -2322,7 +2673,7 @@ const MindmapMasterFlow = () => {
       const edgesCopy = cloneEdgesForHistory(snapshot.edges);
       const { nodes: finalNodes, edges: finalEdges } = applyCollapseState(
         nodesCopy,
-        edgesCopy,
+        edgesCopy
       );
       nodesRef.current = finalNodes;
       edgesRef.current = finalEdges;
@@ -2341,16 +2692,16 @@ const MindmapMasterFlow = () => {
 
       isRestoringRef.current = false;
     },
-    [setEdges, setNodes, setCenter],
+    [setEdges, setNodes, setCenter]
   );
 
   const updateGraph = useCallback(
     (
       mutator: (
         currentNodes: MindmapNode[],
-        currentEdges: MindmapEdge[],
+        currentEdges: MindmapEdge[]
       ) => { nodes: MindmapNode[]; edges: MindmapEdge[] } | null,
-      options?: { relayout?: boolean },
+      options?: { relayout?: boolean }
     ) => {
       const { relayout = true } = options ?? {};
       const prevNodes = nodesRef.current;
@@ -2377,15 +2728,12 @@ const MindmapMasterFlow = () => {
         const visibleEdges = nextEdges.filter(
           (edge) =>
             collapseInfo.visibleIds.has(edge.source) &&
-            collapseInfo.visibleIds.has(edge.target),
+            collapseInfo.visibleIds.has(edge.target)
         );
 
-        const layoutedVisibleNodes = getLayoutedElements(
-          visibleNodes,
-          visibleEdges,
-        );
+        const layoutedResult = getLayoutedElements(visibleNodes, visibleEdges);
         const positionMap = new Map<string, MindmapNode>(
-          layoutedVisibleNodes.map((node) => [node.id, node]),
+          layoutedResult.nodes.map((node) => [node.id, node])
         );
 
         processedNodes = nextNodesRaw.map((node) => {
@@ -2402,7 +2750,7 @@ const MindmapMasterFlow = () => {
       } else {
         processedNodes = nextNodesRaw.map((node) => {
           const prevNode = prevNodes.find(
-            (existing) => existing.id === node.id,
+            (existing) => existing.id === node.id
           );
           if (!prevNode) {
             return { ...node };
@@ -2419,7 +2767,7 @@ const MindmapMasterFlow = () => {
       const { nodes: finalNodes, edges: finalEdgesRaw } = applyCollapseState(
         processedNodes,
         nextEdges,
-        collapseInfo,
+        collapseInfo
       );
 
       const normalizedEdges = finalEdgesRaw.map((edge) => ({
@@ -2438,7 +2786,7 @@ const MindmapMasterFlow = () => {
         pushHistory(finalNodes, normalizedEdges);
       }
     },
-    [pushHistory, setEdges, setNodes],
+    [pushHistory, setEdges, setNodes]
   );
 
   const updateNoteContent = useCallback(
@@ -2454,14 +2802,14 @@ const MindmapMasterFlow = () => {
                     noteContent: content,
                   },
                 }
-              : node,
+              : node
           ),
           edges: edgesState,
         }),
-        { relayout: false },
+        { relayout: false }
       );
     },
-    [updateGraph],
+    [updateGraph]
   );
 
   const setNoteCollapsed = useCallback(
@@ -2477,44 +2825,44 @@ const MindmapMasterFlow = () => {
                     noteCollapsed: collapsed,
                   },
                 }
-              : node,
+              : node
           ),
           edges: edgesState,
         }),
-        { relayout: false },
+        { relayout: false }
       );
     },
-    [updateGraph],
+    [updateGraph]
   );
 
   const applyAiSuggestion = useCallback(
-    (messageId: string, mode: 'add' | 'replace') => {
+    (messageId: string, mode: "add" | "replace") => {
       if (!aiPanelNodeId) {
         return;
       }
 
       const conversation = aiConversations[aiPanelNodeId] ?? [];
       const targetMessage = conversation.find(
-        (entry) => entry.id === messageId,
+        (entry) => entry.id === messageId
       );
       const suggestion = targetMessage?.suggestion;
 
-      if (!suggestion || suggestion.status !== 'pending') {
+      if (!suggestion || suggestion.status !== "pending") {
         return;
       }
 
       const parentNode = nodesRef.current.find(
-        (node) => node.id === aiPanelNodeId,
+        (node) => node.id === aiPanelNodeId
       );
       if (!parentNode) {
         appendConversation(aiPanelNodeId, [
           {
-            id: createMessageId('assistant'),
-            role: 'assistant',
+            id: createMessageId("assistant"),
+            role: "assistant",
             content:
-              'Could not locate the selected node when applying the suggestion.',
+              "Could not locate the selected node when applying the suggestion.",
             createdAt: Date.now(),
-            kind: 'ai',
+            kind: "ai",
             intent: suggestion.intent,
           },
         ]);
@@ -2522,14 +2870,14 @@ const MindmapMasterFlow = () => {
       }
 
       if (suggestion.additions.length === 0 && !suggestion.updates?.length) {
-        updateSuggestionStatus(aiPanelNodeId, messageId, 'accepted', mode);
+        updateSuggestionStatus(aiPanelNodeId, messageId, "accepted", mode);
         appendConversation(aiPanelNodeId, [
           {
-            id: createMessageId('assistant'),
-            role: 'assistant',
-            content: 'Suggestion accepted. Nothing to change right now.',
+            id: createMessageId("assistant"),
+            role: "assistant",
+            content: "Suggestion accepted. Nothing to change right now.",
             createdAt: Date.now(),
-            kind: 'ai',
+            kind: "ai",
             intent: suggestion.intent,
           },
         ]);
@@ -2540,7 +2888,7 @@ const MindmapMasterFlow = () => {
         let nodesDraft = [...currentNodes];
         let edgesDraft = [...currentEdges];
 
-        if (mode === 'replace') {
+        if (mode === "replace") {
           const childIds = new Set<string>();
           const visit = (id: string) => {
             currentEdges.forEach((edge) => {
@@ -2555,8 +2903,7 @@ const MindmapMasterFlow = () => {
           if (childIds.size > 0) {
             nodesDraft = nodesDraft.filter((node) => !childIds.has(node.id));
             edgesDraft = edgesDraft.filter(
-              (edge) =>
-                !childIds.has(edge.source) && !childIds.has(edge.target),
+              (edge) => !childIds.has(edge.source) && !childIds.has(edge.target)
             );
           }
         }
@@ -2567,15 +2914,15 @@ const MindmapMasterFlow = () => {
           const newId = `node-${nodeIdCounter++}`;
           const newNode: MindmapNode = {
             id: newId,
-            type: 'mindmap',
+            type: "mindmap",
             position: { x: parentNode.position.x, y: parentNode.position.y },
             data: {
               label: draft.label,
               level,
-              variant: 'topic',
+              variant: "topic",
               color: COLORS[(level + index) % COLORS.length].value,
-              status: 'not-started',
-              description: draft.description ?? '',
+              status: "not-started",
+              description: draft.description ?? "",
               emoji: draft.emoji,
             },
           };
@@ -2587,8 +2934,8 @@ const MindmapMasterFlow = () => {
             target: newId,
             sourceHandle: `${parentNode.id}-right`,
             targetHandle: `${newId}-left`,
-            type: 'default',
-            style: { stroke: '#cbd5e1', strokeWidth: 2.5 },
+            type: "default",
+            style: { stroke: "#cbd5e1", strokeWidth: 2.5 },
           });
         });
 
@@ -2596,7 +2943,7 @@ const MindmapMasterFlow = () => {
           const latestUpdate =
             suggestion.updates[suggestion.updates.length - 1];
           const parentIndex = nodesDraft.findIndex(
-            (node) => node.id === parentNode.id,
+            (node) => node.id === parentNode.id
           );
           if (parentIndex >= 0) {
             const existing = nodesDraft[parentIndex];
@@ -2616,32 +2963,32 @@ const MindmapMasterFlow = () => {
         };
       });
 
-      updateSuggestionStatus(aiPanelNodeId, messageId, 'accepted', mode);
+      updateSuggestionStatus(aiPanelNodeId, messageId, "accepted", mode);
 
       const summaryParts: string[] = [];
       if (suggestion.additions.length > 0) {
         summaryParts.push(
           `Added ${suggestion.additions.length} new node${
-            suggestion.additions.length === 1 ? '' : 's'
-          } under “${parentNode.data.label}”.`,
+            suggestion.additions.length === 1 ? "" : "s"
+          } under “${parentNode.data.label}”.`
         );
       }
       if (suggestion.updates?.length) {
-        summaryParts.push('Updated the description.');
+        summaryParts.push("Updated the description.");
       }
-      if (mode === 'replace') {
+      if (mode === "replace") {
         summaryParts.unshift(
-          'Replaced earlier children before applying updates.',
+          "Replaced earlier children before applying updates."
         );
       }
 
       appendConversation(aiPanelNodeId, [
         {
-          id: createMessageId('assistant'),
-          role: 'assistant',
-          content: summaryParts.join(' '),
+          id: createMessageId("assistant"),
+          role: "assistant",
+          content: summaryParts.join(" "),
           createdAt: Date.now(),
-          kind: 'ai',
+          kind: "ai",
           intent: suggestion.intent,
         },
       ]);
@@ -2652,21 +2999,21 @@ const MindmapMasterFlow = () => {
       appendConversation,
       updateGraph,
       updateSuggestionStatus,
-    ],
+    ]
   );
 
   const applyAiSuggestionAdd = useCallback(
     (messageId: string) => {
-      applyAiSuggestion(messageId, 'add');
+      applyAiSuggestion(messageId, "add");
     },
-    [applyAiSuggestion],
+    [applyAiSuggestion]
   );
 
   const applyAiSuggestionReplace = useCallback(
     (messageId: string) => {
-      applyAiSuggestion(messageId, 'replace');
+      applyAiSuggestion(messageId, "replace");
     },
-    [applyAiSuggestion],
+    [applyAiSuggestion]
   );
 
   const rejectAiSuggestion = useCallback(
@@ -2677,33 +3024,28 @@ const MindmapMasterFlow = () => {
 
       const conversation = aiConversations[aiPanelNodeId] ?? [];
       const targetMessage = conversation.find(
-        (entry) => entry.id === messageId,
+        (entry) => entry.id === messageId
       );
       const suggestion = targetMessage?.suggestion;
 
-      if (!suggestion || suggestion.status !== 'pending') {
+      if (!suggestion || suggestion.status !== "pending") {
         return;
       }
 
-      updateSuggestionStatus(aiPanelNodeId, messageId, 'rejected');
+      updateSuggestionStatus(aiPanelNodeId, messageId, "rejected");
 
       appendConversation(aiPanelNodeId, [
         {
-          id: createMessageId('assistant'),
-          role: 'assistant',
-          content: 'Suggestion dismissed. No changes were applied.',
+          id: createMessageId("assistant"),
+          role: "assistant",
+          content: "Suggestion dismissed. No changes were applied.",
           createdAt: Date.now(),
-          kind: 'ai',
+          kind: "ai",
           intent: suggestion.intent,
         },
       ]);
     },
-    [
-      aiConversations,
-      aiPanelNodeId,
-      appendConversation,
-      updateSuggestionStatus,
-    ],
+    [aiConversations, aiPanelNodeId, appendConversation, updateSuggestionStatus]
   );
 
   const handleAiModeChange = useCallback(
@@ -2723,7 +3065,7 @@ const MindmapMasterFlow = () => {
         };
       });
     },
-    [aiPanelNodeId, selectedNodeId],
+    [aiPanelNodeId, selectedNodeId]
   );
 
   const runAiInteraction = useCallback(
@@ -2731,31 +3073,31 @@ const MindmapMasterFlow = () => {
       nodeId: string,
       intent: AIIntent,
       options: { manualPrompt?: string; quickActionId?: string } = {},
-      autoApplyMode?: 'add' | 'replace',
+      autoApplyMode?: "add" | "replace"
     ) => {
       const context = buildContextPayload(nodeId, intent, options);
       if (!context) {
         appendConversation(nodeId, [
           {
-            id: createMessageId('assistant'),
-            role: 'assistant',
-            content: 'Could not prepare the node context for AI generation.',
+            id: createMessageId("assistant"),
+            role: "assistant",
+            content: "Could not prepare the node context for AI generation.",
             createdAt: Date.now(),
-            kind: 'ai',
+            kind: "ai",
             intent,
           },
         ]);
-        setAiPanelPhase('error');
-        requestAnimationFrame(() => setAiPanelPhase('idle'));
+        setAiPanelPhase("error");
+        requestAnimationFrame(() => setAiPanelPhase("idle"));
         return;
       }
 
-      setAiPanelPhase('loading');
+      setAiPanelPhase("loading");
 
       try {
         const response = await generateMindmapSuggestions(context);
 
-        const suggestionId = createMessageId('suggestion');
+        const suggestionId = createMessageId("suggestion");
         const suggestion: MindmapAiSuggestion = {
           id: suggestionId,
           summary: response.summary,
@@ -2763,13 +3105,13 @@ const MindmapMasterFlow = () => {
           updates: response.updates,
           followUp: response.followUp,
           warnings: response.warnings,
-          status: 'pending',
+          status: "pending",
           createdAt: Date.now(),
-          model: import.meta.env.VITE_OPENAI_MODEL?.trim() || 'gpt-4o-mini',
+          model: import.meta.env.VITE_OPENAI_MODEL?.trim() || "gpt-4o-mini",
           intent,
         };
 
-        const assistantMessageId = createMessageId('assistant');
+        const assistantMessageId = createMessageId("assistant");
         const messageSuffix =
           suggestion.additions.length === 0 && !suggestion.updates?.length
             ? `${suggestion.summary} (No direct changes yet.)`
@@ -2778,16 +3120,16 @@ const MindmapMasterFlow = () => {
         appendConversation(nodeId, [
           {
             id: assistantMessageId,
-            role: 'assistant',
+            role: "assistant",
             content: messageSuffix,
             createdAt: Date.now(),
-            kind: 'ai',
+            kind: "ai",
             suggestion,
             intent,
           },
         ]);
 
-        setAiPanelPhase('idle');
+        setAiPanelPhase("idle");
 
         if (autoApplyMode) {
           applyAiSuggestion(assistantMessageId, autoApplyMode);
@@ -2796,26 +3138,26 @@ const MindmapMasterFlow = () => {
         const fallbackMessage =
           error instanceof MindmapAiError
             ? error.message
-            : 'The AI request failed. Please try again shortly.';
+            : "The AI request failed. Please try again shortly.";
 
-        console.error('[Mindmap AI] generation error', error);
+        console.error("[Mindmap AI] generation error", error);
 
         appendConversation(nodeId, [
           {
-            id: createMessageId('assistant'),
-            role: 'assistant',
+            id: createMessageId("assistant"),
+            role: "assistant",
             content: fallbackMessage,
             createdAt: Date.now(),
-            kind: 'ai',
+            kind: "ai",
             intent,
           },
         ]);
 
-        setAiPanelPhase('error');
-        setTimeout(() => setAiPanelPhase('idle'), 2000);
+        setAiPanelPhase("error");
+        setTimeout(() => setAiPanelPhase("idle"), 2000);
       }
     },
-    [appendConversation, applyAiSuggestion, buildContextPayload],
+    [appendConversation, applyAiSuggestion, buildContextPayload]
   );
 
   const handleQuickActionSelect = useCallback(
@@ -2825,7 +3167,7 @@ const MindmapMasterFlow = () => {
       }
 
       const action = AI_INTENT_META[aiPanelMode].quickActions.find(
-        (item) => item.id === actionId,
+        (item) => item.id === actionId
       );
       if (!action) {
         return;
@@ -2833,11 +3175,11 @@ const MindmapMasterFlow = () => {
 
       const now = Date.now();
       const userMessage: StoredAIMessage = {
-        id: createMessageId('user'),
-        role: 'user',
+        id: createMessageId("user"),
+        role: "user",
         content: `Quick action: ${action.label}`,
         createdAt: now,
-        kind: 'quick',
+        kind: "quick",
         intent: aiPanelMode,
       };
 
@@ -2861,7 +3203,7 @@ const MindmapMasterFlow = () => {
       appendConversation,
       runAiInteraction,
       setAiIntentPreference,
-    ],
+    ]
   );
 
   const handlePromptSubmit = useCallback(
@@ -2878,11 +3220,11 @@ const MindmapMasterFlow = () => {
       const now = Date.now();
 
       const userMessage: StoredAIMessage = {
-        id: createMessageId('user'),
-        role: 'user',
+        id: createMessageId("user"),
+        role: "user",
         content: trimmed,
         createdAt: now,
-        kind: 'manual',
+        kind: "manual",
         intent: aiPanelMode,
       };
 
@@ -2906,27 +3248,27 @@ const MindmapMasterFlow = () => {
       appendConversation,
       runAiInteraction,
       setAiIntentPreference,
-    ],
+    ]
   );
 
   const triggerAiQuickAction = useCallback(
-    (nodeId: string, intent: AIIntent, applyMode: 'add' | 'replace') => {
+    (nodeId: string, intent: AIIntent, applyMode: "add" | "replace") => {
       openAiPanel(nodeId, intent);
 
-      const quickActionId = applyMode === 'replace' ? 'replace' : 'children';
+      const quickActionId = applyMode === "replace" ? "replace" : "children";
       const quickMeta = AI_INTENT_META[intent].quickActions.find(
-        (item) => item.id === quickActionId,
+        (item) => item.id === quickActionId
       );
 
       const now = Date.now();
       const userMessage: StoredAIMessage = {
-        id: createMessageId('user'),
-        role: 'user',
+        id: createMessageId("user"),
+        role: "user",
         content: quickMeta
           ? `Quick action: ${quickMeta.label}`
           : `Quick action: ${intent} (${applyMode})`,
         createdAt: now,
-        kind: 'quick',
+        kind: "quick",
         intent,
       };
 
@@ -2934,7 +3276,7 @@ const MindmapMasterFlow = () => {
 
       runAiInteraction(nodeId, intent, { quickActionId }, applyMode);
     },
-    [appendConversation, openAiPanel, runAiInteraction],
+    [appendConversation, openAiPanel, runAiInteraction]
   );
 
   const relayout = useCallback(() => {
@@ -2943,18 +3285,18 @@ const MindmapMasterFlow = () => {
         nodes: [...currentNodes],
         edges: [...currentEdges],
       }),
-      { relayout: true },
+      { relayout: true }
     );
   }, [updateGraph]);
 
   const focusNodes = useCallback(
     (
       _nodeIds: string[],
-      _options?: { zoomToFit?: boolean; duration?: number; padding?: number },
+      _options?: { zoomToFit?: boolean; duration?: number; padding?: number }
     ) => {
       // Intentionally left blank: auto zoom is disabled for a calmer canvas.
     },
-    [],
+    []
   );
 
   const undo = useCallback(() => {
@@ -2990,7 +3332,7 @@ const MindmapMasterFlow = () => {
         nodes: [...currentNodes],
         edges: [...currentEdges],
       }),
-      { relayout: !hasSavedFlow },
+      { relayout: !hasSavedFlow }
     );
 
     const timeout = setTimeout(() => {
@@ -3002,7 +3344,7 @@ const MindmapMasterFlow = () => {
               y: savedViewport.y,
               zoom: savedViewport.zoom,
             },
-            { duration: 0 },
+            { duration: 0 }
           );
           return;
         }
@@ -3042,15 +3384,15 @@ const MindmapMasterFlow = () => {
 
         const newNode: MindmapNode = {
           id: newId,
-          type: 'mindmap',
+          type: "mindmap",
           position: { x: 0, y: 0 },
           data: {
-            label: 'New Topic',
+            label: "New Topic",
             level: parent.data.level + 1,
-            variant: 'topic',
+            variant: "topic",
             color: COLORS[(parent.data.level + 1) % COLORS.length].value,
-            status: 'not-started',
-            description: '',
+            status: "not-started",
+            description: "",
           },
         };
 
@@ -3060,8 +3402,8 @@ const MindmapMasterFlow = () => {
           target: newId,
           sourceHandle: `${parentId}-right`,
           targetHandle: `${newId}-left`,
-          type: 'default',
-          style: { stroke: '#cbd5e1', strokeWidth: 2.5 },
+          type: "default",
+          style: { stroke: "#cbd5e1", strokeWidth: 2.5 },
         };
 
         return {
@@ -3070,7 +3412,7 @@ const MindmapMasterFlow = () => {
         };
       });
     },
-    [updateGraph],
+    [updateGraph]
   );
 
   const addEdgeNote = useCallback(
@@ -3088,15 +3430,15 @@ const MindmapMasterFlow = () => {
 
         const newNode: MindmapNode = {
           id: newId,
-          type: 'edge-note',
+          type: "edge-note",
           position: parentPosition,
           data: {
-            label: 'Content Draft',
+            label: "Content Draft",
             level,
-            variant: 'edge-note',
-            noteContent: '',
+            variant: "edge-note",
+            noteContent: "",
             noteCollapsed: false,
-            color: '#fef3c7',
+            color: "#fef3c7",
           },
         };
 
@@ -3106,8 +3448,8 @@ const MindmapMasterFlow = () => {
           target: newId,
           sourceHandle: `${parentId}-right`,
           targetHandle: `${newId}-left`,
-          type: 'default',
-          style: { stroke: '#cbd5e1', strokeWidth: 2.5 },
+          type: "default",
+          style: { stroke: "#cbd5e1", strokeWidth: 2.5 },
         };
 
         return {
@@ -3116,7 +3458,7 @@ const MindmapMasterFlow = () => {
         };
       });
     },
-    [updateGraph],
+    [updateGraph]
   );
 
   // Delete node and descendants
@@ -3145,10 +3487,10 @@ const MindmapMasterFlow = () => {
         collectDescendants(nodeId);
 
         const filteredNodes = currentNodes.filter(
-          (n) => !nodesToDelete.has(n.id),
+          (n) => !nodesToDelete.has(n.id)
         );
         const filteredEdges = currentEdges.filter(
-          (e) => !nodesToDelete.has(e.source) && !nodesToDelete.has(e.target),
+          (e) => !nodesToDelete.has(e.source) && !nodesToDelete.has(e.target)
         );
 
         return {
@@ -3164,7 +3506,7 @@ const MindmapMasterFlow = () => {
         });
       }
     },
-    [updateGraph, focusNodes],
+    [updateGraph, focusNodes]
   );
 
   // Update node label
@@ -3181,14 +3523,14 @@ const MindmapMasterFlow = () => {
                     label,
                   },
                 }
-              : n,
+              : n
           ),
           edges: edgesState,
         }),
-        { relayout: false },
+        { relayout: false }
       );
     },
-    [updateGraph],
+    [updateGraph]
   );
 
   // Update node description
@@ -3205,14 +3547,14 @@ const MindmapMasterFlow = () => {
                     description,
                   },
                 }
-              : n,
+              : n
           ),
           edges: edgesState,
         }),
-        { relayout: false },
+        { relayout: false }
       );
     },
-    [updateGraph],
+    [updateGraph]
   );
 
   // Update node status
@@ -3229,14 +3571,14 @@ const MindmapMasterFlow = () => {
                     status,
                   },
                 }
-              : n,
+              : n
           ),
           edges: edgesState,
         }),
-        { relayout: false },
+        { relayout: false }
       );
     },
-    [updateGraph],
+    [updateGraph]
   );
 
   // Change node color
@@ -3254,14 +3596,14 @@ const MindmapMasterFlow = () => {
                     color,
                   },
                 }
-              : n,
+              : n
           ),
           edges: edgesState,
         }),
-        { relayout: false },
+        { relayout: false }
       );
     },
-    [selectedNodeId, updateGraph],
+    [selectedNodeId, updateGraph]
   );
 
   // Change node emoji
@@ -3279,14 +3621,14 @@ const MindmapMasterFlow = () => {
                     emoji,
                   },
                 }
-              : n,
+              : n
           ),
           edges: edgesState,
         }),
-        { relayout: false },
+        { relayout: false }
       );
     },
-    [selectedNodeId, updateGraph],
+    [selectedNodeId, updateGraph]
   );
 
   const toggleCollapse = useCallback(
@@ -3301,7 +3643,7 @@ const MindmapMasterFlow = () => {
                   collapsed,
                 },
               }
-            : node,
+            : node
         ),
         edges: edgesState,
       }));
@@ -3339,7 +3681,7 @@ const MindmapMasterFlow = () => {
         });
       });
     },
-    [focusNodes, updateGraph],
+    [focusNodes, updateGraph]
   );
 
   // Add root node
@@ -3357,15 +3699,15 @@ const MindmapMasterFlow = () => {
       const newId = `root-${nodeIdCounter++}`;
       const newNode: MindmapNode = {
         id: newId,
-        type: 'mindmap',
+        type: "mindmap",
         position: { x: centerX, y: centerY },
         data: {
-          label: 'New Root',
+          label: "New Root",
           level: 0,
-          variant: 'topic',
+          variant: "topic",
           color: COLORS[0].value,
-          status: 'not-started',
-          description: '',
+          status: "not-started",
+          description: "",
         },
       };
 
@@ -3383,20 +3725,20 @@ const MindmapMasterFlow = () => {
       edges: edges.map((e) => ({ source: e.source, target: e.target })),
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], {
-      type: 'application/json',
+      type: "application/json",
     });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
+    const a = document.createElement("a");
     a.href = url;
-    a.download = 'mindmap.json';
+    a.download = "mindmap.json";
     a.click();
   }, [nodes, edges]);
 
   // Import
   const importData = useCallback(() => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.json';
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".json";
     input.onchange = (e: any) => {
       const file = e.target.files[0];
       const reader = new FileReader();
@@ -3405,7 +3747,7 @@ const MindmapMasterFlow = () => {
           const data = JSON.parse(event.target?.result as string);
           const importedNodes: MindmapNode[] = data.nodes.map((n: any) => ({
             id: n.id,
-            type: 'mindmap',
+            type: "mindmap",
             position: { x: 0, y: 0 },
             data: n.data,
           }));
@@ -3413,14 +3755,14 @@ const MindmapMasterFlow = () => {
             id: `${e.source}-${e.target}`,
             source: e.source,
             target: e.target,
-            sourceHandle: 'right',
-            targetHandle: 'left',
-            type: 'default',
-            style: { stroke: '#cbd5e1', strokeWidth: 2.5 },
+            sourceHandle: "right",
+            targetHandle: "left",
+            type: "default",
+            style: { stroke: "#cbd5e1", strokeWidth: 2.5 },
           }));
           updateGraph(() => ({ nodes: importedNodes, edges: importedEdges }));
         } catch (_err) {
-          alert('Invalid file format');
+          alert("Invalid file format");
         }
       };
       reader.readAsText(file);
@@ -3430,21 +3772,21 @@ const MindmapMasterFlow = () => {
 
   // Clear all
   const clearAll = useCallback(() => {
-    if (confirm('Clear all nodes? This cannot be undone.')) {
-      if (typeof window !== 'undefined') {
+    if (confirm("Clear all nodes? This cannot be undone.")) {
+      if (typeof window !== "undefined") {
         window.localStorage.removeItem(FLOW_STORAGE_KEY);
       }
 
       const resetNodes: MindmapNode[] = [
         {
-          id: 'root',
-          type: 'mindmap',
+          id: "root",
+          type: "mindmap",
           position: { ...DEFAULT_VIEWPORT_CENTER },
           positionAbsolute: { ...DEFAULT_VIEWPORT_CENTER },
           data: {
-            label: 'My Mindmap',
+            label: "My Mindmap",
             level: 0,
-            variant: 'topic',
+            variant: "topic",
             color: COLORS[0].value,
           },
         },
@@ -3510,12 +3852,12 @@ const MindmapMasterFlow = () => {
       // Only delete if not editing and a node is selected
       const activeElement = document.activeElement;
       const isEditing =
-        activeElement?.tagName === 'INPUT' ||
-        activeElement?.tagName === 'TEXTAREA';
+        activeElement?.tagName === "INPUT" ||
+        activeElement?.tagName === "TEXTAREA";
 
       if ((e.metaKey || e.ctrlKey) && !isEditing) {
         const key = e.key.toLowerCase();
-        if (key === 'z') {
+        if (key === "z") {
           e.preventDefault();
           if (e.shiftKey) {
             redo();
@@ -3524,7 +3866,7 @@ const MindmapMasterFlow = () => {
           }
           return;
         }
-        if (key === 'y') {
+        if (key === "y") {
           e.preventDefault();
           redo();
           return;
@@ -3532,12 +3874,12 @@ const MindmapMasterFlow = () => {
       }
 
       if (
-        (e.key === 'Delete' || e.key === 'Backspace') &&
+        (e.key === "Delete" || e.key === "Backspace") &&
         !isEditing &&
         selectedNodeId
       ) {
         const nodeToDelete = nodesRef.current.find(
-          (n) => n.id === selectedNodeId,
+          (n) => n.id === selectedNodeId
         );
         // Don't delete root nodes (level 0)
         if (nodeToDelete && nodeToDelete.data.level > 0) {
@@ -3554,7 +3896,7 @@ const MindmapMasterFlow = () => {
       if (!detail?.nodeId) {
         return;
       }
-      updateNoteContent(detail.nodeId, detail.content ?? '');
+      updateNoteContent(detail.nodeId, detail.content ?? "");
     };
 
     const handleToggleNoteCollapsed = (event: Event) => {
@@ -3567,35 +3909,35 @@ const MindmapMasterFlow = () => {
       setNoteCollapsed(detail.nodeId, Boolean(detail.collapsed));
     };
 
-    window.addEventListener('add-child', handleAddChild);
-    window.addEventListener('delete-node', handleDeleteNode);
-    window.addEventListener('update-node-label', handleUpdateLabel);
-    window.addEventListener('update-node-description', handleUpdateDescription);
-    window.addEventListener('update-node-status', handleUpdateStatus);
-    window.addEventListener('update-note-content', handleUpdateNoteContent);
-    window.addEventListener('toggle-note-collapsed', handleToggleNoteCollapsed);
-    window.addEventListener('focus-node', handleFocusNode);
-    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener("add-child", handleAddChild);
+    window.addEventListener("delete-node", handleDeleteNode);
+    window.addEventListener("update-node-label", handleUpdateLabel);
+    window.addEventListener("update-node-description", handleUpdateDescription);
+    window.addEventListener("update-node-status", handleUpdateStatus);
+    window.addEventListener("update-note-content", handleUpdateNoteContent);
+    window.addEventListener("toggle-note-collapsed", handleToggleNoteCollapsed);
+    window.addEventListener("focus-node", handleFocusNode);
+    window.addEventListener("keydown", handleKeyDown);
 
     return () => {
-      window.removeEventListener('add-child', handleAddChild);
-      window.removeEventListener('delete-node', handleDeleteNode);
-      window.removeEventListener('update-node-label', handleUpdateLabel);
+      window.removeEventListener("add-child", handleAddChild);
+      window.removeEventListener("delete-node", handleDeleteNode);
+      window.removeEventListener("update-node-label", handleUpdateLabel);
       window.removeEventListener(
-        'update-node-description',
-        handleUpdateDescription,
+        "update-node-description",
+        handleUpdateDescription
       );
-      window.removeEventListener('update-node-status', handleUpdateStatus);
+      window.removeEventListener("update-node-status", handleUpdateStatus);
       window.removeEventListener(
-        'update-note-content',
-        handleUpdateNoteContent,
+        "update-note-content",
+        handleUpdateNoteContent
       );
       window.removeEventListener(
-        'toggle-note-collapsed',
-        handleToggleNoteCollapsed,
+        "toggle-note-collapsed",
+        handleToggleNoteCollapsed
       );
-      window.removeEventListener('focus-node', handleFocusNode);
-      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener("focus-node", handleFocusNode);
+      window.removeEventListener("keydown", handleKeyDown);
     };
   }, [
     addChild,
@@ -3616,16 +3958,16 @@ const MindmapMasterFlow = () => {
     (changes: NodeChange[]) => {
       // Check if this is a root node being dragged
       const positionChange = changes.find(
-        (c) => c.type === 'position' && 'dragging' in c && c.dragging,
+        (c) => c.type === "position" && "dragging" in c && c.dragging
       );
 
       if (
         positionChange &&
-        'position' in positionChange &&
+        "position" in positionChange &&
         positionChange.position
       ) {
         const draggedNode = nodesRef.current.find(
-          (n) => n.id === positionChange.id,
+          (n) => n.id === positionChange.id
         );
 
         // If dragging a root node (level 0), move only its tree (root + descendants)
@@ -3665,7 +4007,7 @@ const MindmapMasterFlow = () => {
           const modifiedChanges: NodeChange<MindmapNode>[] = nodesRef.current
             .filter((node) => treeNodeIds.has(node.id))
             .map((node) => ({
-              type: 'position' as const,
+              type: "position" as const,
               id: node.id,
               position: {
                 x: node.position.x + deltaX,
@@ -3674,35 +4016,33 @@ const MindmapMasterFlow = () => {
               dragging: positionChange.id === node.id,
             }));
 
-          onNodesChange(
-            modifiedChanges as NodeChange<MindmapNode>[] as NodeChange[],
-          );
+          onNodesChange(modifiedChanges as any);
           return;
         }
       }
 
-      onNodesChange(changes as NodeChange<MindmapNode>[] as NodeChange[]);
+      onNodesChange(changes as any);
 
-      const selectChange = changes.find((c) => c.type === 'select');
-      if (selectChange && 'selected' in selectChange) {
+      const selectChange = changes.find((c) => c.type === "select");
+      if (selectChange && "selected" in selectChange) {
         const nodeId = selectChange.selected ? selectChange.id : null;
         setSelectedNodeId(nodeId);
       }
     },
-    [onNodesChange],
+    [onNodesChange]
   );
 
   const selectedNode = selectedNodeId
-    ? (nodes.find((n) => n.id === selectedNodeId) ?? null)
+    ? nodes.find((n) => n.id === selectedNodeId) ?? null
     : null;
 
   const aiPanelNode = aiPanelNodeId
-    ? (nodes.find((n) => n.id === aiPanelNodeId) ?? null)
+    ? nodes.find((n) => n.id === aiPanelNodeId) ?? null
     : null;
 
   const aiStatusMeta = aiPanelNode
     ? STATUS_OPTIONS.find(
-        (option) => option.value === normalizeStatus(aiPanelNode.data.status),
+        (option) => option.value === normalizeStatus(aiPanelNode.data.status)
       )
     : null;
 
@@ -3711,7 +4051,7 @@ const MindmapMasterFlow = () => {
         id: aiPanelNode.id,
         label: aiPanelNode.data.label,
         description:
-          typeof aiPanelNode.data.description === 'string'
+          typeof aiPanelNode.data.description === "string"
             ? aiPanelNode.data.description
             : undefined,
         level: aiPanelNode.data.level,
@@ -3762,8 +4102,8 @@ const MindmapMasterFlow = () => {
       <div className="mindmap-canvas">
         <ReactFlow
           defaultEdgeOptions={{
-            type: 'default',
-            style: { stroke: '#cbd5e1', strokeWidth: 2.5 },
+            type: "default",
+            style: { stroke: "#cbd5e1", strokeWidth: 2.5 },
           }}
           edges={edges}
           maxZoom={2}
@@ -3773,7 +4113,7 @@ const MindmapMasterFlow = () => {
           onEdgesChange={onEdgesChange}
           onNodesChange={handleNodesChange}
           onSelectionChange={handleSelectionChange}
-          style={{ width: '100%', height: '100%' }}
+          style={{ width: "100%", height: "100%" }}
         >
           <Background
             color="#bbb"
@@ -3785,7 +4125,7 @@ const MindmapMasterFlow = () => {
           <MiniMap
             nodeColor={(node: any) => {
               const color = node.data?.color;
-              return color || '#4facfe';
+              return color || "#4facfe";
             }}
             pannable
             zoomable

@@ -13,6 +13,9 @@
   "dependencies": {
     "@dagrejs/dagre": "^1.1.5",
     "@del-wang/utils": "^1.5.0",
+    "@tiptap/extension-placeholder": "^3.7.2",
+    "@tiptap/react": "^3.7.2",
+    "@tiptap/starter-kit": "^3.7.2",
     "@xyflow/react": "^12.8.6",
     "d3-dag": "^1.1.0",
     "d3-hierarchy": "^3.1.2",
