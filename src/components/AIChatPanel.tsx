@@ -167,38 +167,41 @@ export const AIChatPanel: FC<AIChatPanelProps> = ({
 
       <div className="ai-chat-scroll" ref={scrollContainerRef}>
         <section className="ai-chat-node-summary">
-        {hasNode ? (
-          <div className="ai-chat-node-card">
-            <div className="ai-chat-node-meta">
-              <div>
-                <p className="ai-chat-node-label">Level {node!.level}</p>
-                <p className="ai-chat-node-children">
-                  {node!.childCount === 0
-                    ? 'No children yet'
-                    : `${node!.childCount} child${node!.childCount === 1 ? '' : 'ren'} in this branch`}
-                </p>
+          {hasNode ? (
+            <div className="ai-chat-node-card">
+              <div className="ai-chat-node-meta">
+                <div>
+                  <p className="ai-chat-node-label">Level {node!.level}</p>
+                  <p className="ai-chat-node-children">
+                    {node!.childCount === 0
+                      ? 'No children yet'
+                      : `${node!.childCount} child${node!.childCount === 1 ? '' : 'ren'} in this branch`}
+                  </p>
+                </div>
+                <span className="ai-chat-node-marker">
+                  <IconMagicWand size={16} />
+                </span>
               </div>
-              <span className="ai-chat-node-marker">
-                <IconMagicWand size={16} />
-              </span>
+              {node?.description ? (
+                <p className="ai-chat-node-description">{node.description}</p>
+              ) : (
+                <p className="ai-chat-node-placeholder">
+                  Add a short description to nudge the AI in the right
+                  direction.
+                </p>
+              )}
             </div>
-            {node?.description ? (
-              <p className="ai-chat-node-description">{node.description}</p>
-            ) : (
-              <p className="ai-chat-node-placeholder">
-                Add a short description to nudge the AI in the right direction.
+          ) : (
+            <div className="ai-chat-node-empty">
+              <p>
+                Select a node on the mindmap to start a focused AI conversation.
               </p>
-            )}
-          </div>
-        ) : (
-          <div className="ai-chat-node-empty">
-            <p>Select a node on the mindmap to start a focused AI conversation.</p>
-          </div>
-        )}
+            </div>
+          )}
         </section>
 
         {showQuickActions ? (
-          <section className="ai-chat-quick" aria-live="polite">
+          <section aria-live="polite" className="ai-chat-quick">
             <span className="ai-chat-section-title">Quick start</span>
             <div className="ai-chat-chip-row">
               {quickActions.map((prompt) => (
@@ -214,7 +217,9 @@ export const AIChatPanel: FC<AIChatPanelProps> = ({
                 </button>
               ))}
             </div>
-            <p className="ai-chat-quick-hint">Pick a bubble to preview how the assistant can help.</p>
+            <p className="ai-chat-quick-hint">
+              Pick a bubble to preview how the assistant can help.
+            </p>
           </section>
         ) : null}
 
@@ -231,7 +236,8 @@ export const AIChatPanel: FC<AIChatPanelProps> = ({
             <div className="ai-chat-message error">
               <div className="ai-chat-bubble">
                 <p className="ai-chat-message-body">
-                  Something went wrong while generating ideas. Try again in a moment.
+                  Something went wrong while generating ideas. Try again in a
+                  moment.
                 </p>
               </div>
             </div>
@@ -266,25 +272,32 @@ export const AIChatPanel: FC<AIChatPanelProps> = ({
             Describe what you need
           </label>
           <textarea
-            id="ai-chat-draft"
             className="ai-chat-textarea"
+            disabled={!hasNode || phase === 'loading'}
+            id="ai-chat-draft"
+            onChange={(event) => setDraft(event.target.value)}
             placeholder={
               hasNode
                 ? `Ask the AI to work on “${node?.label ?? 'this node'}”…`
                 : 'Select a node to start chatting'
             }
             value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            disabled={!hasNode || phase === 'loading'}
           />
           <div className="ai-chat-actions">
             <span className="ai-chat-input-helper">
-              Your prompts stay on this device for now. Database sync is coming later.
+              Your prompts stay on this device for now. Database sync is coming
+              later.
             </span>
             <button
               className="ai-chat-run"
-              disabled={!hasNode || phase === 'loading' || draft.trim().length === 0}
-              title={hasNode ? 'Send a custom prompt' : 'Select a node to enable AI actions'}
+              disabled={
+                !hasNode || phase === 'loading' || draft.trim().length === 0
+              }
+              title={
+                hasNode
+                  ? 'Send a custom prompt'
+                  : 'Select a node to enable AI actions'
+              }
               type="submit"
             >
               Send prompt

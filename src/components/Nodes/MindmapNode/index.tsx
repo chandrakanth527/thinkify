@@ -9,6 +9,7 @@ import {
   useEffect,
   useState,
 } from 'react';
+
 import type { MindmapNode } from '@/mindmap/types';
 
 export const MindmapNodeComponent: ComponentType<NodeProps<MindmapNode>> = memo(

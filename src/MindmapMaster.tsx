@@ -32,9 +32,9 @@ import {
 
 import {
   AIChatPanel,
+  type AIChatPanelMessage,
   type AIChatPanelNodeSummary,
   type AIChatPanelPhase,
-  type AIChatPanelMessage,
   type AIChatPanelQuickAction,
 } from '@/components/AIChatPanel';
 import {
@@ -216,6 +216,19 @@ const ZOOM_DURATIONS = {
   delete: 300,
   undo: 400,
 };
+
+// Virtual canvas configuration – keep the graph centered within a generous stage
+const CANVAS_DIMENSIONS = {
+  width: 16000,
+  height: 9000,
+};
+
+const DEFAULT_VIEWPORT_CENTER = {
+  x: CANVAS_DIMENSIONS.width / 2,
+  y: CANVAS_DIMENSIONS.height / 2,
+};
+
+const DEFAULT_VIEWPORT_ZOOM = 1.1;
 
 let nodeIdCounter = 100;
 
@@ -461,6 +474,7 @@ const getLayoutedElements = (nodes: MindmapNode[], edges: MindmapEdge[]) => {
     node: MindmapNode,
     x: number,
     yStart: number,
+    anchorParent = false,
   ): number => {
     if (visited.has(node.id)) {
       // Prevent infinite recursion in case of malformed graphs
@@ -474,7 +488,9 @@ const getLayoutedElements = (nodes: MindmapNode[], edges: MindmapEdge[]) => {
     if (children.length === 0) {
       // Leaf node
       const leafY = yStart + currentY * verticalSpacing;
-      const existingIndex = layoutedNodes.findIndex((entry) => entry.id === node.id);
+      const existingIndex = layoutedNodes.findIndex(
+        (entry) => entry.id === node.id,
+      );
       const nextNode: MindmapNode = {
         ...node,
         position: { x, y: leafY },
@@ -491,7 +507,12 @@ const getLayoutedElements = (nodes: MindmapNode[], edges: MindmapEdge[]) => {
     // Position children first
     const childYPositions: number[] = [];
     children.forEach((child) => {
-      const childY = positionNode(child, x + horizontalSpacing, yStart);
+      const childY = positionNode(
+        child,
+        x + horizontalSpacing,
+        yStart,
+        false,
+      );
       childYPositions.push(childY);
     });
 
@@ -499,10 +520,12 @@ const getLayoutedElements = (nodes: MindmapNode[], edges: MindmapEdge[]) => {
     const parentY =
       (childYPositions[0] + childYPositions[childYPositions.length - 1]) / 2;
 
-    const existingIndex = layoutedNodes.findIndex((entry) => entry.id === node.id);
+    const existingIndex = layoutedNodes.findIndex(
+      (entry) => entry.id === node.id,
+    );
     const nextNode: MindmapNode = {
       ...node,
-      position: { x, y: parentY },
+      position: { x, y: anchorParent ? yStart : parentY },
     };
     if (existingIndex >= 0) {
       layoutedNodes[existingIndex] = nextNode;
@@ -510,7 +533,7 @@ const getLayoutedElements = (nodes: MindmapNode[], edges: MindmapEdge[]) => {
       layoutedNodes.push(nextNode);
     }
 
-    return parentY;
+    return anchorParent ? yStart : parentY;
   };
 
   // Layout each root separately, preserving root positions
@@ -522,7 +545,7 @@ const getLayoutedElements = (nodes: MindmapNode[], edges: MindmapEdge[]) => {
     const rootY = root.position.y;
 
     // Position the tree, but we'll adjust to keep root at its current position
-    positionNode(root, rootX, rootY);
+    positionNode(root, rootX, rootY, true);
   });
 
   return layoutedNodes;
@@ -698,7 +721,9 @@ const MindmapNodeComponent = ({ data, id, selected }: any) => {
                 className="node-status-compact-dot"
                 style={{ background: statusMeta.color }}
               />
-              <span className="node-status-compact-icon">{statusMeta.icon}</span>
+              <span className="node-status-compact-icon">
+                {statusMeta.icon}
+              </span>
             </span>
           </button>
         ) : (
@@ -771,12 +796,12 @@ const MindmapNodeComponent = ({ data, id, selected }: any) => {
 
       <button
         className="node-add-btn"
-        onPointerDown={(event) => event.stopPropagation()}
         onClick={() =>
           window.dispatchEvent(
             new CustomEvent('add-child', { detail: { parentId: id } }),
           )
         }
+        onPointerDown={(event) => event.stopPropagation()}
         title="Add child"
         type="button"
       >
@@ -924,8 +949,7 @@ const NodeActionToolbar = ({
   const transform = useStore((state) => state.transform);
   const storeNode = useStore(
     useCallback(
-      (state) =>
-        node ? state.nodeInternals?.get?.(node.id) ?? null : null,
+      (state) => (node ? (state.nodeInternals?.get?.(node.id) ?? null) : null),
       [node?.id],
     ),
   );
@@ -1161,7 +1185,8 @@ const MindmapMasterFlow = () => {
     {
       id: 'root',
       type: 'mindmap',
-      position: { x: 0, y: 0 },
+      position: { ...DEFAULT_VIEWPORT_CENTER },
+      positionAbsolute: { ...DEFAULT_VIEWPORT_CENTER },
       data: {
         label: 'My Mindmap',
         level: 0,
@@ -1186,7 +1211,11 @@ const MindmapMasterFlow = () => {
       }
 
       const parsed = JSON.parse(raw) as StoredFlowState;
-      if (!parsed || !Array.isArray(parsed.nodes) || !Array.isArray(parsed.edges)) {
+      if (
+        !parsed ||
+        !Array.isArray(parsed.nodes) ||
+        !Array.isArray(parsed.edges)
+      ) {
         return null;
       }
 
@@ -1245,11 +1274,10 @@ const MindmapMasterFlow = () => {
               rawEdge.targetHandle ?? `${String(rawEdge.target)}-left`,
             type: rawEdge.type ?? 'default',
             data: rawEdge.data,
-            style:
-              rawEdge.style ?? {
-                stroke: '#cbd5e1',
-                strokeWidth: 2.5,
-              },
+            style: rawEdge.style ?? {
+              stroke: '#cbd5e1',
+              strokeWidth: 2.5,
+            },
             animated: rawEdge.animated,
           };
 
@@ -1270,8 +1298,9 @@ const MindmapMasterFlow = () => {
   const hasSavedFlow = Boolean(savedFlow);
   const savedViewport = savedFlow?.viewport ?? null;
 
-  const [nodes, setNodes, onNodesChange] =
-    useNodesState<MindmapNode>(savedFlow?.nodes?.length ? savedFlow.nodes : initialNodes);
+  const [nodes, setNodes, onNodesChange] = useNodesState<MindmapNode>(
+    savedFlow?.nodes?.length ? savedFlow.nodes : initialNodes,
+  );
   const [edges, setEdges, onEdgesChange] = useEdgesState<MindmapEdge>(
     savedFlow?.edges ?? [],
   );
@@ -1296,7 +1325,7 @@ const MindmapMasterFlow = () => {
       return {};
     }
   });
-  const { fitView, setCenter } = useReactFlow();
+  const { setCenter } = useReactFlow();
   const transformStore = useStore((state) => state.transform);
   const transformRef = useRef<[number, number, number]>([0, 0, 1]);
 
@@ -1427,7 +1456,8 @@ const MindmapMasterFlow = () => {
 
       const now = Date.now();
       const targetNode =
-        nodesRef.current.find((nodeItem) => nodeItem.id === aiPanelNodeId) ?? null;
+        nodesRef.current.find((nodeItem) => nodeItem.id === aiPanelNodeId) ??
+        null;
       const nodeLabel = targetNode?.data?.label ?? 'selected node';
 
       const userMessage: StoredAIMessage = {
@@ -1464,7 +1494,8 @@ const MindmapMasterFlow = () => {
 
       const now = Date.now();
       const targetNode =
-        nodesRef.current.find((nodeItem) => nodeItem.id === aiPanelNodeId) ?? null;
+        nodesRef.current.find((nodeItem) => nodeItem.id === aiPanelNodeId) ??
+        null;
       const nodeLabel = targetNode?.data?.label ?? 'selected node';
 
       const userMessage: StoredAIMessage = {
@@ -1651,15 +1682,7 @@ const MindmapMasterFlow = () => {
       }),
       { relayout: true },
     );
-
-    requestAnimationFrame(() => {
-      fitView({
-        padding: 0.25,
-        duration: ZOOM_DURATIONS.autoLayout,
-        maxZoom: ZOOM_LIMITS.comfortable.max,
-      });
-    });
-  }, [updateGraph, fitView]);
+  }, [updateGraph]);
 
   const focusNodes = useCallback(
     (
@@ -1708,29 +1731,36 @@ const MindmapMasterFlow = () => {
     );
 
     const timeout = setTimeout(() => {
-      if (hasSavedFlow && savedViewport) {
-        setCenter(savedViewport.x, savedViewport.y, {
-          zoom: savedViewport.zoom,
-          duration: 0,
-        });
-        return;
+      if (hasSavedFlow) {
+        if (savedViewport) {
+          setCenter(savedViewport.x, savedViewport.y, {
+            zoom: savedViewport.zoom,
+            duration: 0,
+          });
+          return;
+        }
+
+        const primaryNode =
+          nodesRef.current.find((node) => node.data.level === 0) ??
+          nodesRef.current[0];
+
+        if (primaryNode) {
+          setCenter(primaryNode.position.x, primaryNode.position.y, {
+            zoom: DEFAULT_VIEWPORT_ZOOM,
+            duration: ZOOM_DURATIONS.initial,
+          });
+          return;
+        }
       }
 
-      fitView({
-        padding: 0.2,
+      setCenter(DEFAULT_VIEWPORT_CENTER.x, DEFAULT_VIEWPORT_CENTER.y, {
+        zoom: DEFAULT_VIEWPORT_ZOOM,
         duration: ZOOM_DURATIONS.initial,
-        maxZoom: ZOOM_LIMITS.comfortable.max,
       });
     }, 0);
 
     return () => clearTimeout(timeout);
-  }, [
-    fitView,
-    hasSavedFlow,
-    savedViewport,
-    setCenter,
-    updateGraph,
-  ]);
+  }, [hasSavedFlow, nodesRef, savedViewport, setCenter, updateGraph]);
 
   // Add child node
   const addChild = useCallback(
@@ -2094,7 +2124,8 @@ const MindmapMasterFlow = () => {
         {
           id: 'root',
           type: 'mindmap',
-          position: { x: 0, y: 0 },
+          position: { ...DEFAULT_VIEWPORT_CENTER },
+          positionAbsolute: { ...DEFAULT_VIEWPORT_CENTER },
           data: { label: 'My Mindmap', level: 0, color: COLORS[0].value },
         },
       ];
@@ -2363,7 +2394,6 @@ const MindmapMasterFlow = () => {
             style: { stroke: '#cbd5e1', strokeWidth: 2.5 },
           }}
           edges={edges}
-          fitView
           maxZoom={2}
           minZoom={0.1}
           nodes={nodes}
@@ -2422,8 +2452,8 @@ const MindmapMasterFlow = () => {
         isOpen={isAiPanelOpen}
         messages={panelMessages}
         node={aiPanelSummary}
-        onSelectQuickAction={handleQuickActionSelect}
         onClose={closeAiPanel}
+        onSelectQuickAction={handleQuickActionSelect}
         onSubmitMessage={handlePromptSubmit}
         phase={aiPanelPhase}
         quickActions={AI_QUICK_ACTIONS}
