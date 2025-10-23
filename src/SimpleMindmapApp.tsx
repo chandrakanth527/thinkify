@@ -1,6 +1,5 @@
 import '@xyflow/react/dist/style.css';
 
-import dagre from '@dagrejs/dagre';
 import {
   addEdge,
   Background,
@@ -179,14 +178,6 @@ const getLayoutedElements = (nodes: Node[], edges: Edge[]) => {
   const startY = 300;
   const horizontalSpacing = 250; // Distance between levels
   const verticalSpacing = 100; // Distance between siblings
-
-  // Calculate total height needed for a subtree
-  const getSubtreeHeight = (nodeId: string): number => {
-    const children = childrenMap.get(nodeId) || [];
-    if (children.length === 0) return 1;
-
-    return children.reduce((sum, child) => sum + getSubtreeHeight(child.id), 0);
-  };
 
   // Position nodes recursively
   let currentYOffset = 0;

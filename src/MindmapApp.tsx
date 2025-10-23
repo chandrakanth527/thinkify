@@ -7,7 +7,6 @@ import {
   BackgroundVariant,
   type Connection,
   Controls,
-  type Edge,
   MiniMap,
   ReactFlow,
   ReactFlowProvider,

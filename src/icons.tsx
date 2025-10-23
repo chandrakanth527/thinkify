@@ -104,3 +104,10 @@ export const IconX = createIcon([
   <path d="M18 6 6 18" key="line1" />,
   <path d="m6 6 12 12" key="line2" />,
 ]);
+
+export const IconNote = createIcon([
+  <path d="M14 3H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V9z" key="body" />,
+  <path d="M14 3v6h6" key="fold" />,
+  <path d="M10 13h4" key="line1" />,
+  <path d="M9 17h6" key="line2" />,
+]);

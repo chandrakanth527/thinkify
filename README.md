@@ -52,6 +52,16 @@ The project is organized into functional modules that can be easily adapted for 
 
 While the codebase may appear complex at first glance, the underlying logic is relatively straightforward. Feel free to open an [issue](https://github.com/idootop/reactflow-auto-layout/issues) if you have any questions.
 
+## 🤖 AI Assistant (experimental)
+
+The mindmap now features an optional AI copilot for drafting new child nodes and refreshing descriptions.
+
+- Copy `.env.example` to `.env` and add your personal OpenAI key to `VITE_OPENAI_API_KEY` (the value stays on your machine).
+- Optionally change `VITE_OPENAI_MODEL` to another cost-effective model; the default is `gpt-4o-mini`.
+- In the app, open a node, launch the AI pane, and review suggestions before accepting or rejecting them. Nothing is applied without your confirmation.
+
+All prompts and responses are stored locally in the browser for now.
+
 ## ❤️ Acknowledgements
 
 This project builds upon the work of many others:
