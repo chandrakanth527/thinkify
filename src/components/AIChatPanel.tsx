@@ -8,7 +8,7 @@ import {
   useState,
 } from 'react';
 
-import { IconMagicWand, IconX } from '@/icons';
+import { IconMagicWand, IconX, IconCollapse, IconExpand } from '@/icons';
 
 type PanelPhase = 'idle' | 'loading' | 'error';
 
@@ -87,19 +87,6 @@ interface AIChatPanelProps {
   phase?: PanelPhase;
 }
 
-const placeholderMessages = [
-  {
-    id: 'welcome',
-    title: 'AI assistant is ready',
-    body: 'Pick a quick action or describe what you need. This conversation stays tied to the selected node.',
-  },
-  {
-    id: 'tip',
-    title: 'Tip',
-    body: 'You can accept, edit, or discard AI suggestions before they land on the mindmap.',
-  },
-];
-
 export const AIChatPanel: FC<AIChatPanelProps> = ({
   isOpen,
   node,
@@ -117,8 +104,13 @@ export const AIChatPanel: FC<AIChatPanelProps> = ({
   phase = 'idle',
 }) => {
   const [draft, setDraft] = useState('');
+  const [selectedSuggestionIds, setSelectedSuggestionIds] = useState<Set<string>>(new Set());
+  const [refinementPrompt, setRefinementPrompt] = useState('');
+
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
-  const textareaId = useId();
+  const generateTextareaId = useId();
+  const refinementTextareaId = useId();
+
   const modeEntries = useMemo(
     () =>
       Object.entries(intentMeta) as Array<
@@ -127,10 +119,6 @@ export const AIChatPanel: FC<AIChatPanelProps> = ({
     [intentMeta],
   );
   const activeIntentMeta = intentMeta[mode];
-
-  useEffect(() => {
-    setDraft('');
-  }, [node?.id, isOpen]);
 
   const sortedMessages = useMemo(
     () =>
@@ -141,9 +129,42 @@ export const AIChatPanel: FC<AIChatPanelProps> = ({
       ),
     [messages],
   );
+
+  // Find the latest pending suggestion
+  const latestPendingSuggestion = useMemo(() => {
+    for (let i = sortedMessages.length - 1; i >= 0; i--) {
+      const msg = sortedMessages[i];
+      if (msg.suggestion && msg.suggestion.status === 'pending') {
+        return { message: msg, suggestion: msg.suggestion };
+      }
+    }
+    return null;
+  }, [sortedMessages]);
+
+  // Auto-select all suggestions when new pending suggestion appears
+  useEffect(() => {
+    if (latestPendingSuggestion) {
+      const newIds = new Set(
+        latestPendingSuggestion.suggestion.additions.map((_, idx) =>
+          `${latestPendingSuggestion.message.id}-${idx}`
+        )
+      );
+      setSelectedSuggestionIds(newIds);
+      setRefinementPrompt('');
+    }
+  }, [latestPendingSuggestion?.message.id]);
+
+  // Reset on node change
+  useEffect(() => {
+    setDraft('');
+    setRefinementPrompt('');
+  }, [node?.id, isOpen]);
+
   const hasMessages = sortedMessages.length > 0;
   const hasNode = Boolean(node);
+  const isReviewMode = Boolean(latestPendingSuggestion);
   const showQuickActions = hasNode && !hasMessages && quickActions.length > 0;
+
   const statusBadge = node?.statusLabel
     ? {
         label: node.statusLabel,
@@ -152,7 +173,10 @@ export const AIChatPanel: FC<AIChatPanelProps> = ({
       }
     : null;
 
-  const submitDraft = () => {
+  const selectedCount = selectedSuggestionIds.size;
+  const totalCount = latestPendingSuggestion?.suggestion.additions.length ?? 0;
+
+  const submitGenerate = () => {
     if (!hasNode || phase === 'loading') {
       return;
     }
@@ -164,9 +188,34 @@ export const AIChatPanel: FC<AIChatPanelProps> = ({
     setDraft('');
   };
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const submitRefinement = () => {
+    if (!hasNode || phase === 'loading') {
+      return;
+    }
+    const trimmed = refinementPrompt.trim();
+    if (!trimmed) {
+      return;
+    }
+
+    // Build context: include current suggestions + refinement request
+    const currentSuggestions = latestPendingSuggestion?.suggestion.additions
+      .map((item, idx) => `${idx + 1}. ${item.label}${item.description ? `: ${item.description}` : ''}`)
+      .join('\n') ?? '';
+
+    const contextPrompt = `Current suggestions:\n${currentSuggestions}\n\nRefinement request: ${trimmed}`;
+
+    onSubmitMessage(contextPrompt);
+    setRefinementPrompt('');
+  };
+
+  const handleGenerateSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    submitDraft();
+    submitGenerate();
+  };
+
+  const handleRefinementSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    submitRefinement();
   };
 
   const handleQuickAction = (actionId: string) => {
@@ -176,13 +225,40 @@ export const AIChatPanel: FC<AIChatPanelProps> = ({
     onSelectQuickAction(actionId);
   };
 
+  const toggleSuggestionSelection = (suggestionId: string) => {
+    setSelectedSuggestionIds(prev => {
+      const next = new Set(prev);
+      if (next.has(suggestionId)) {
+        next.delete(suggestionId);
+      } else {
+        next.add(suggestionId);
+      }
+      return next;
+    });
+  };
+
+  const handleAddSelected = () => {
+    if (!latestPendingSuggestion || selectedCount === 0) {
+      return;
+    }
+    onAddSuggestion?.(latestPendingSuggestion.message.id);
+  };
+
+  const handleStartOver = () => {
+    setSelectedSuggestionIds(new Set());
+    setRefinementPrompt('');
+    setDraft('');
+    if (latestPendingSuggestion) {
+      onRejectSuggestion?.(latestPendingSuggestion.message.id);
+    }
+  };
+
   useEffect(() => {
     if (!isOpen || !scrollContainerRef.current) {
       return;
     }
 
     const element = scrollContainerRef.current;
-    // Scroll to the bottom so the latest message is visible
     requestAnimationFrame(() => {
       element.scrollTop = element.scrollHeight;
     });
@@ -224,297 +300,200 @@ export const AIChatPanel: FC<AIChatPanelProps> = ({
       </header>
 
       <div className="ai-chat-scroll" ref={scrollContainerRef}>
-        <div className="ai-chat-modes">
-          <div className="ai-chat-mode-switch">
-            {modeEntries.map(([intentKey, metadata]) => (
-              <button
-                className={
-                  intentKey === mode
-                    ? 'ai-chat-mode-btn is-active'
-                    : 'ai-chat-mode-btn'
-                }
-                key={intentKey}
-                onClick={() => onModeChange(intentKey)}
-                type="button"
-              >
-                {metadata.label}
-              </button>
-            ))}
-          </div>
-          <p className="ai-chat-mode-tagline">{activeIntentMeta.tagline}</p>
-        </div>
-
-        <section className="ai-chat-node-summary">
-          {hasNode ? (
-            <div className="ai-chat-node-card">
-              <div className="ai-chat-node-meta">
-                <div>
-                  <p className="ai-chat-node-label">Level {node!.level}</p>
-                  <p className="ai-chat-node-children">
-                    {node!.childCount === 0
-                      ? 'No children yet'
-                      : `${node!.childCount} child${node!.childCount === 1 ? '' : 'ren'} in this branch`}
-                  </p>
-                </div>
-                <span className="ai-chat-node-marker">
-                  <IconMagicWand size={16} />
-                </span>
-              </div>
-              {node?.description ? (
-                <p className="ai-chat-node-description">{node.description}</p>
-              ) : (
-                <p className="ai-chat-node-placeholder">
-                  Add a short description to nudge the AI in the right
-                  direction.
-                </p>
-              )}
-            </div>
-          ) : (
-            <div className="ai-chat-node-empty">
-              <p>
-                Select a node on the mindmap to start a focused AI conversation.
-              </p>
-            </div>
-          )}
-        </section>
-
-        {showQuickActions ? (
-          <section aria-live="polite" className="ai-chat-quick">
-            <span className="ai-chat-section-title">Quick start</span>
-            <div className="ai-chat-chip-row">
-              {quickActions.map((prompt) => (
+        {/* Compact Controls - Always Visible */}
+        {hasNode && (
+          <section className="ai-chat-controls">
+            <div className="ai-chat-mode-chips">
+              {modeEntries.map(([intentKey, metadata]) => (
                 <button
-                  className="ai-chat-chip"
-                  disabled={!hasNode || phase === 'loading'}
-                  key={prompt.id}
-                  onClick={() => handleQuickAction(prompt.id)}
-                  title={prompt.description}
+                  className={
+                    intentKey === mode
+                      ? 'ai-chat-mode-chip is-active'
+                      : 'ai-chat-mode-chip'
+                  }
+                  key={intentKey}
+                  onClick={() => onModeChange(intentKey)}
+                  title={metadata.tagline}
                   type="button"
                 >
-                  {prompt.label}
+                  {intentKey === 'spark' ? '✨' : '🔍'}
+                  {metadata.label}
                 </button>
               ))}
             </div>
-            <p className="ai-chat-quick-hint">
-              {activeIntentMeta.quickHint ??
-                'Pick a bubble to preview how the assistant can help.'}
-            </p>
           </section>
-        ) : null}
+        )}
 
-        <section className="ai-chat-feed">
-          {phase === 'loading' && (
-            <div className="ai-chat-message loading">
-              <div className="ai-chat-bubble">
-                <div className="ai-chat-loading-spinner" />
-                <p className="ai-chat-message-body">Preparing suggestions…</p>
-              </div>
-            </div>
-          )}
-          {phase === 'error' && (
-            <div className="ai-chat-message error">
-              <div className="ai-chat-bubble">
-                <p className="ai-chat-message-body">
-                  Something went wrong while generating ideas. Try again in a
-                  moment.
-                </p>
-              </div>
-            </div>
-          )}
-
-          {!hasMessages && phase === 'idle' && (
-            <div className="ai-chat-message assistant">
-              <div className="ai-chat-bubble ai-chat-welcome">
-                {placeholderMessages.map((message) => (
-                  <div className="ai-chat-placeholder" key={message.id}>
-                    <p className="ai-chat-message-title">{message.title}</p>
-                    <p className="ai-chat-message-body">{message.body}</p>
+        {/* Conversation History - Compact */}
+        {hasMessages && (
+          <section className="ai-chat-history">
+            <div className="ai-chat-history-list">
+              {sortedMessages.map((message) => (
+                <div
+                  className={`ai-chat-history-item ${message.role}`}
+                  key={message.id}
+                >
+                  <div className="ai-chat-history-bubble">
+                    <p className="ai-chat-history-text">{message.content}</p>
+                    {message.suggestion && message.suggestion.status !== 'pending' && (
+                      <span className="ai-chat-history-badge">
+                        {message.suggestion.status === 'accepted' ? '✓' : '✗'}
+                      </span>
+                    )}
                   </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Generate Panel - Compact */}
+        {!isReviewMode && (
+          <section className="ai-chat-generate-panel">
+            {showQuickActions && (
+              <div className="ai-chat-chip-row">
+                {quickActions.map((prompt) => (
+                  <button
+                    className="ai-chat-chip-compact"
+                    disabled={!hasNode || phase === 'loading'}
+                    key={prompt.id}
+                    onClick={() => handleQuickAction(prompt.id)}
+                    title={prompt.description}
+                    type="button"
+                  >
+                    {prompt.label}
+                  </button>
                 ))}
               </div>
-            </div>
-          )}
+            )}
 
-          {sortedMessages.map((message) => {
-            const suggestion = message.suggestion;
-            return (
-              <div
-                className={`ai-chat-message ${message.role}`}
-                key={message.id}
+            <form className="ai-chat-generate-form" onSubmit={handleGenerateSubmit}>
+              <textarea
+                className="ai-chat-textarea"
+                disabled={!hasNode || phase === 'loading'}
+                id={generateTextareaId}
+                onChange={(event) => setDraft(event.target.value)}
+                placeholder={
+                  hasNode
+                    ? 'Describe what you need...'
+                    : 'Select a node to start'
+                }
+                rows={2}
+                value={draft}
+              />
+              <button
+                className="ai-chat-btn-primary"
+                disabled={!hasNode || phase === 'loading' || draft.trim().length === 0}
+                type="submit"
               >
-                <div className="ai-chat-bubble">
-                  <p className="ai-chat-message-body">{message.content}</p>
-                  {suggestion ? (
-                    <div
-                      className={`ai-chat-suggestion ai-chat-suggestion-${suggestion.status}`}
-                    >
-                      <div className="ai-chat-suggestion-header">
-                        <span className="ai-chat-suggestion-title">
-                          {suggestion.intent
-                            ? intentMeta[suggestion.intent].label
-                            : 'Proposed nodes'}
-                        </span>
-                        <span className="ai-chat-suggestion-status">
-                          {suggestion.status === 'pending'
-                            ? 'Awaiting review'
-                            : suggestion.status === 'accepted'
-                              ? suggestion.appliedMode === 'replace'
-                                ? 'Applied (replaced)'
-                                : 'Applied (added)'
-                              : 'Dismissed'}
-                        </span>
-                      </div>
-                      <ul className="ai-chat-suggestion-list">
-                        {suggestion.additions.map((addition, index) => (
-                          <li
-                            className="ai-chat-suggestion-item"
-                            key={`${suggestion.id}-addition-${index}`}
-                          >
-                            <div className="ai-chat-suggestion-item-title">
-                              {addition.emoji ? (
-                                <span className="ai-chat-suggestion-emoji">
-                                  {addition.emoji}
-                                </span>
-                              ) : null}
-                              <strong>{addition.label}</strong>
-                              {addition.emphasis ? (
-                                <span className="ai-chat-suggestion-emphasis">
-                                  {addition.emphasis}
-                                </span>
-                              ) : null}
-                            </div>
-                            {addition.description ? (
-                              <p className="ai-chat-suggestion-description">
-                                {addition.description}
-                              </p>
-                            ) : null}
-                          </li>
-                        ))}
-                      </ul>
-                      {suggestion.updates?.length ? (
-                        <div className="ai-chat-suggestion-updates">
-                          <span className="ai-chat-suggestion-subtitle">
-                            Description update
-                          </span>
-                          {suggestion.updates.map((update, index) => (
-                            <p
-                              className="ai-chat-suggestion-description"
-                              key={`${suggestion.id}-update-${index}`}
-                            >
-                              {update.description}
-                            </p>
-                          ))}
-                        </div>
-                      ) : null}
-                      {suggestion.warnings?.length ? (
-                        <ul className="ai-chat-suggestion-warnings">
-                          {suggestion.warnings.map((warning, index) => (
-                            <li key={`${suggestion.id}-warning-${index}`}>
-                              {warning}
-                            </li>
-                          ))}
-                        </ul>
-                      ) : null}
-                      {suggestion.followUp ? (
-                        <p className="ai-chat-suggestion-followup">
-                          Next idea: {suggestion.followUp}
-                        </p>
-                      ) : null}
+                {phase === 'loading' ? 'Generating...' : 'Generate'}
+              </button>
+            </form>
 
-                      {suggestion.status === 'pending' ? (
-                        <div className="ai-chat-suggestion-actions">
-                          <button
-                            className="ai-chat-chip"
-                            disabled={
-                              phase === 'loading' ||
-                              suggestion.additions.length === 0
-                            }
-                            onClick={() => onAddSuggestion?.(message.id)}
-                            type="button"
-                          >
-                            {intentMeta[suggestion.intent ?? mode].addLabel}
-                          </button>
-                          <button
-                            className="ai-chat-chip warning"
-                            disabled={
-                              phase === 'loading' ||
-                              suggestion.additions.length === 0
-                            }
-                            onClick={() => onReplaceSuggestion?.(message.id)}
-                            type="button"
-                          >
-                            {intentMeta[suggestion.intent ?? mode].replaceLabel}
-                          </button>
-                          <button
-                            className="ai-chat-chip danger"
-                            disabled={phase === 'loading'}
-                            onClick={() => onRejectSuggestion?.(message.id)}
-                            type="button"
-                          >
-                            Reject
-                          </button>
-                        </div>
-                      ) : null}
-                    </div>
-                  ) : null}
-                </div>
+            {phase === 'loading' && (
+              <div className="ai-chat-loading-compact">
+                <div className="ai-chat-loading-spinner" />
+                <span>Generating...</span>
               </div>
-            );
-          })}
-        </section>
-      </div>
+            )}
 
-      <footer className="ai-chat-footer">
-        <form className="ai-chat-form" onSubmit={handleSubmit}>
-          <label className="ai-chat-input-label" htmlFor={textareaId}>
-            Describe what you need
-          </label>
-          <textarea
-            className="ai-chat-textarea"
-            disabled={!hasNode || phase === 'loading'}
-            id={textareaId}
-            onChange={(event) => setDraft(event.target.value)}
-            onKeyDown={(event) => {
-              if (
-                event.key === 'Enter' &&
-                !event.shiftKey &&
-                !event.ctrlKey &&
-                !event.metaKey &&
-                !event.altKey
-              ) {
-                event.preventDefault();
-                submitDraft();
-              }
-            }}
-            placeholder={
-              hasNode
-                ? activeIntentMeta.placeholder(node?.label)
-                : 'Select a node to start chatting'
-            }
-            value={draft}
-          />
-          <div className="ai-chat-actions">
-            <span className="ai-chat-input-helper">
-              Your prompts stay on this device for now. Database sync is coming
-              later.
-            </span>
-            <button
-              className="ai-chat-run"
-              disabled={
-                !hasNode || phase === 'loading' || draft.trim().length === 0
-              }
-              title={
-                hasNode
-                  ? 'Send a custom prompt'
-                  : 'Select a node to enable AI actions'
-              }
-              type="submit"
-            >
-              Send prompt
-            </button>
-          </div>
-        </form>
-      </footer>
+            {phase === 'error' && (
+              <div className="ai-chat-error-compact">
+                <span>⚠ Error. Try again.</span>
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* Review Panel - Compact */}
+        {isReviewMode && (
+          <section className="ai-chat-review-panel">
+            <div className="ai-chat-review-count">
+              {selectedCount} of {totalCount} selected
+            </div>
+
+            <div className="ai-chat-selection-list">
+              {latestPendingSuggestion.suggestion.additions.map((item, idx) => {
+                const itemId = `${latestPendingSuggestion.message.id}-${idx}`;
+                const isSelected = selectedSuggestionIds.has(itemId);
+
+                return (
+                  <label
+                    className={
+                      isSelected
+                        ? 'ai-chat-selection-item is-selected'
+                        : 'ai-chat-selection-item'
+                    }
+                    key={itemId}
+                  >
+                    <input
+                      checked={isSelected}
+                      className="ai-chat-selection-checkbox"
+                      onChange={() => toggleSuggestionSelection(itemId)}
+                      type="checkbox"
+                    />
+                    <div className="ai-chat-selection-content">
+                      {item.emoji && (
+                        <span className="ai-chat-selection-emoji">{item.emoji}</span>
+                      )}
+                      <strong>{item.label}</strong>
+                      {item.description && (
+                        <p className="ai-chat-selection-desc">
+                          {item.description}
+                        </p>
+                      )}
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+
+            <form className="ai-chat-refinement-form" onSubmit={handleRefinementSubmit}>
+              <textarea
+                className="ai-chat-textarea"
+                disabled={phase === 'loading'}
+                id={refinementTextareaId}
+                onChange={(event) => setRefinementPrompt(event.target.value)}
+                placeholder='Refine: "remove last two", "more technical"...'
+                rows={2}
+                value={refinementPrompt}
+              />
+              <div className="ai-chat-review-actions">
+                <button
+                  className="ai-chat-btn-secondary"
+                  disabled={phase === 'loading' || refinementPrompt.trim().length === 0}
+                  type="submit"
+                >
+                  {phase === 'loading' ? 'Refining...' : 'Refine'}
+                </button>
+                <button
+                  className="ai-chat-btn-primary"
+                  disabled={phase === 'loading' || selectedCount === 0}
+                  onClick={handleAddSelected}
+                  type="button"
+                >
+                  Add ({selectedCount})
+                </button>
+                <button
+                  className="ai-chat-btn-ghost-compact"
+                  disabled={phase === 'loading'}
+                  onClick={handleStartOver}
+                  type="button"
+                >
+                  ×
+                </button>
+              </div>
+            </form>
+
+            {phase === 'loading' && (
+              <div className="ai-chat-loading-compact">
+                <div className="ai-chat-loading-spinner" />
+                <span>Refining...</span>
+              </div>
+            )}
+          </section>
+        )}
+      </div>
     </aside>
   );
 };

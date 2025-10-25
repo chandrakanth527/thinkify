@@ -15,21 +15,22 @@ Your role is to generate ACTUAL CONCRETE CONTENT - the real deliverables, not th
 IMPORTANT RULES:
 - Generate CONCRETE, ACTIONABLE ITEMS that represent the actual content/output
 - Keep titles under 8 words, descriptions under 40 words
-- Suggest 3-5 concrete items per response
+- Generate only meaningful items (minimum 3, maximum 10) - quality over quantity
+- The number of suggestions should match the scope and complexity of the topic
 - Avoid meta/process items like "research", "planning", "review" - those belong in Deepen mode
 - Each suggestion should be something tangible you could implement/create directly
 
 If the topic doesn't lend itself to concrete content items, return an empty additions array with explanation.`,
     defaultObjective:
       'Generate actual concrete content items (chapters, features, columns, components, etc.) that represent the deliverables for this node.',
-    defaultTask: 'Generate 3-5 concrete content items for this topic.',
+    defaultTask: 'Generate meaningful concrete content items (3-10) for this topic based on its scope.',
     quickObjectives: {
       children:
-        'Generate 3-5 concrete content items (actual chapters, features, columns, etc.) for this topic.',
+        'Generate meaningful concrete content items (3-10) - actual chapters, features, columns, etc. - based on the topic scope.',
       expand:
-        'Generate additional concrete content items that expand the scope of deliverables.',
+        'Generate additional meaningful concrete content items that expand the scope of deliverables.',
       replace:
-        'Generate a fresh set of 3-5 concrete content items that differ from existing ones.',
+        'Generate a fresh set of meaningful concrete content items that differ from existing ones.',
     } satisfies Record<string, string>,
   },
   deepen: {
@@ -47,7 +48,8 @@ IMPORTANT RULES:
 - Generate PROCESS/WORKFLOW NODES that help accomplish the task
 - These are the HOW-TO steps, milestones, or phases needed to complete the work
 - Keep titles under 8 words, descriptions under 50 words
-- Suggest 4-6 process steps per response
+- Generate only meaningful process steps (minimum 3, maximum 10) based on task complexity
+- The number of steps should reflect the actual workflow needed - simple tasks need fewer steps
 - Think about phases: research → planning → execution → review
 - Each node should represent a distinct stage or activity in the workflow
 
@@ -55,12 +57,12 @@ If no meaningful process steps can be identified, return an empty additions arra
     defaultObjective:
       'Outline the key process steps, phases, or workflow nodes needed to accomplish this goal from start to finish.',
     defaultTask:
-      'Generate 4-6 process/workflow steps that guide how to accomplish this task.',
+      'Generate meaningful process/workflow steps (3-10) based on the complexity of this task.',
     quickObjectives: {
       children:
-        'List 4-6 essential process steps or phases needed to accomplish this task.',
+        'List essential process steps or phases (3-10) needed to accomplish this task, matching its complexity.',
       expand:
-        'Provide additional workflow nodes covering research, planning, execution, and review phases.',
+        'Provide additional meaningful workflow nodes covering research, planning, execution, and review phases.',
       replace:
         'Recommend an improved set of process steps that better structure the workflow.',
     } satisfies Record<string, string>,
