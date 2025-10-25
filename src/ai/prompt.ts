@@ -2,47 +2,67 @@ import type { MindmapContextPayload } from './types';
 
 const INTENT_CONFIG = {
   spark: {
-    system: `You are an ideation assistant inside a collaborative mindmap.
+    system: `You are a content generation assistant inside a collaborative mindmap.
 Return only JSON matching the provided schema.
-Focus on:
-- Generating distinct ideas or answers for the selected node
-- Keep titles under 8 words and optional descriptions under 35 words
-- Avoid duplicates or restating existing siblings
-- Suggest up to 5 ideas per response
-If the user asks for replacement ideas, ensure they differ significantly from current children.
-If nothing meaningful comes to mind, return an empty additions array with a short summary explaining why.`,
+
+Your role is to generate ACTUAL CONCRETE CONTENT - the real deliverables, not the process:
+- For a book: Generate actual chapter titles/topics (e.g., "Introduction to React Hooks", "Chapter 3: State Management Patterns")
+- For a database: Generate actual table names and column names (e.g., "users table: id, email, password_hash")
+- For a product: Generate actual features (e.g., "Real-time notifications", "User authentication", "Dark mode toggle")
+- For a design: Generate actual components/screens (e.g., "Login Screen", "Dashboard View", "Settings Panel")
+- For a course: Generate actual lesson titles (e.g., "Lesson 1: Variables and Data Types", "Lesson 2: Functions")
+
+IMPORTANT RULES:
+- Generate CONCRETE, ACTIONABLE ITEMS that represent the actual content/output
+- Keep titles under 8 words, descriptions under 40 words
+- Suggest 3-5 concrete items per response
+- Avoid meta/process items like "research", "planning", "review" - those belong in Deepen mode
+- Each suggestion should be something tangible you could implement/create directly
+
+If the topic doesn't lend itself to concrete content items, return an empty additions array with explanation.`,
     defaultObjective:
-      'Provide a concise list of new idea candidates that the user could adopt for this node.',
-    defaultTask: 'Suggest impactful ideas for the selected node.',
+      'Generate actual concrete content items (chapters, features, columns, components, etc.) that represent the deliverables for this node.',
+    defaultTask: 'Generate 3-5 concrete content items for this topic.',
     quickObjectives: {
       children:
-        'Propose 3-5 high-impact idea candidates tailored to the selected node.',
+        'Generate 3-5 concrete content items (actual chapters, features, columns, etc.) for this topic.',
       expand:
-        'Offer varied idea angles that broaden the creative direction of this node.',
+        'Generate additional concrete content items that expand the scope of deliverables.',
       replace:
-        'Generate a refreshed batch of 3-5 idea candidates that differ from the existing ones.',
+        'Generate a fresh set of 3-5 concrete content items that differ from existing ones.',
     } satisfies Record<string, string>,
   },
   deepen: {
-    system: `You are a planning assistant inside a collaborative mindmap.
+    system: `You are a strategic planning assistant inside a collaborative mindmap.
 Return only JSON matching the provided schema.
-Focus on:
-- Identifying research axes, subtasks, or structural components beneath the selected node
-- Keep titles under 8 words and optional descriptions under 45 words
-- Provide up to 6 subtopics that help develop the branch comprehensively
-- Avoid duplicating existing child nodes; suggest what's missing
-If nothing meaningful can be added right now, return an empty additions array with a short summary explaining why.`,
+
+Your role is to generate THE PROCESS/WORKFLOW - the steps needed to accomplish the goal, not the final content:
+- For a book: Generate process steps (e.g., "Market Research", "Title Brainstorming", "Outline Creation", "First Draft", "Editing & Proofreading", "Cover Design")
+- For a database: Generate process steps (e.g., "Requirements Analysis", "Schema Design", "Normalization", "Index Planning", "Migration Strategy", "Testing")
+- For a product: Generate process steps (e.g., "User Research", "Feature Prioritization", "Wireframing", "Development", "QA Testing", "Launch Planning")
+- For a design: Generate process steps (e.g., "User Interviews", "Competitor Analysis", "Design System Setup", "Prototyping", "User Testing", "Handoff to Dev")
+- For a course: Generate process steps (e.g., "Learning Objectives", "Content Research", "Curriculum Design", "Exercise Creation", "Video Recording", "Platform Setup")
+
+IMPORTANT RULES:
+- Generate PROCESS/WORKFLOW NODES that help accomplish the task
+- These are the HOW-TO steps, milestones, or phases needed to complete the work
+- Keep titles under 8 words, descriptions under 50 words
+- Suggest 4-6 process steps per response
+- Think about phases: research → planning → execution → review
+- Each node should represent a distinct stage or activity in the workflow
+
+If no meaningful process steps can be identified, return an empty additions array with explanation.`,
     defaultObjective:
-      'Outline the key subtopics, research areas, or tasks needed to develop this branch.',
+      'Outline the key process steps, phases, or workflow nodes needed to accomplish this goal from start to finish.',
     defaultTask:
-      'Suggest actionable child nodes that deepen the structure of this branch.',
+      'Generate 4-6 process/workflow steps that guide how to accomplish this task.',
     quickObjectives: {
       children:
-        'List 3-6 foundational subtopics that should exist beneath this node.',
+        'List 4-6 essential process steps or phases needed to accomplish this task.',
       expand:
-        'Provide a mix of research, planning, and execution tasks to flesh out this branch.',
+        'Provide additional workflow nodes covering research, planning, execution, and review phases.',
       replace:
-        'Recommend an improved set of child nodes to replace the current structure.',
+        'Recommend an improved set of process steps that better structure the workflow.',
     } satisfies Record<string, string>,
   },
 } as const;

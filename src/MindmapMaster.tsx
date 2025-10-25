@@ -156,59 +156,59 @@ const AI_INTENT_META: Record<
   }
 > = {
   spark: {
-    label: "Spark Ideas",
-    tagline: "Generate alternative ideas or answers for this node.",
-    addLabel: "Add ideas",
-    replaceLabel: "Replace ideas",
+    label: "Spark Content",
+    tagline: "Generate actual concrete content - the real deliverables (chapters, features, columns, etc.).",
+    addLabel: "Add content items",
+    replaceLabel: "Replace content items",
     placeholder: (nodeLabel) =>
       nodeLabel
-        ? `Ask for fresh ideas for “${nodeLabel}”…`
-        : "Ask for fresh ideas…",
-    quickHint: "Choose a shortcut to brainstorm new ideas instantly.",
+        ? `Generate concrete content for "${nodeLabel}"…`
+        : "Generate concrete content items…",
+    quickHint: "Generate actual deliverable content items (not process steps).",
     quickActions: [
       {
         id: "children",
-        label: "Fresh ideas",
-        description: "Suggest a handful of candidate ideas for this topic.",
+        label: "Generate content",
+        description: "Create 3-5 concrete content items (chapters, features, components, etc.).",
       },
       {
         id: "expand",
-        label: "Different angles",
-        description: "Explore alternative perspectives or niches to consider.",
+        label: "More content",
+        description: "Generate additional concrete items to expand the scope.",
       },
       {
         id: "replace",
-        label: "Reimagine ideas",
-        description: "Swap current ideas for a refreshed, more varied batch.",
+        label: "Fresh content",
+        description: "Replace with new concrete content items.",
       },
     ],
   },
   deepen: {
-    label: "Deepen Structure",
-    tagline: "Break the node into research areas, tasks, or subtopics.",
-    addLabel: "Add subtopics",
-    replaceLabel: "Replace subtopics",
+    label: "Deepen Workflow",
+    tagline: "Generate process steps and workflow - how to accomplish this task from start to finish.",
+    addLabel: "Add process steps",
+    replaceLabel: "Replace process steps",
     placeholder: (nodeLabel) =>
       nodeLabel
-        ? `Ask how to deepen “${nodeLabel}”…`
-        : "Ask how to deepen this branch…",
-    quickHint: "Pick a shortcut to outline research steps or supporting tasks.",
+        ? `How to accomplish "${nodeLabel}"…`
+        : "Generate workflow steps…",
+    quickHint: "Generate process/workflow nodes (research, planning, execution steps).",
     quickActions: [
       {
         id: "children",
-        label: "Core subtopics",
+        label: "Process steps",
         description:
-          "Outline the foundational subtopics that should live here.",
+          "Generate 4-6 workflow steps to accomplish this task.",
       },
       {
         id: "expand",
-        label: "Research plan",
-        description: "List research tasks, experiments, or analyses to run.",
+        label: "Complete workflow",
+        description: "Generate full workflow covering research, planning, execution, and review.",
       },
       {
         id: "replace",
-        label: "Rebuild branch",
-        description: "Replace existing subtopics with a stronger structure.",
+        label: "Better workflow",
+        description: "Replace with an improved process structure.",
       },
     ],
   },
@@ -1832,8 +1832,8 @@ const AiMenu = ({
           >
             <IconSparkle size={16} />
             <div>
-              <span className="ai-toolbar-menu-title">Spark ideas</span>
-              <span className="ai-toolbar-menu-caption">Add as new ideas</span>
+              <span className="ai-toolbar-menu-title">Spark content</span>
+              <span className="ai-toolbar-menu-caption">Generate concrete deliverables</span>
             </div>
           </button>
           <button
@@ -1845,10 +1845,10 @@ const AiMenu = ({
             <IconSparkle size={16} />
             <div>
               <span className="ai-toolbar-menu-title">
-                Replace with spark ideas
+                Replace with new content
               </span>
               <span className="ai-toolbar-menu-caption">
-                Swap out existing ideas
+                Swap with fresh deliverables
               </span>
             </div>
           </button>
@@ -1860,9 +1860,9 @@ const AiMenu = ({
           >
             <IconLayout size={16} />
             <div>
-              <span className="ai-toolbar-menu-title">Deepen structure</span>
+              <span className="ai-toolbar-menu-title">Deepen workflow</span>
               <span className="ai-toolbar-menu-caption">
-                Add supporting subtopics
+                Add process steps
               </span>
             </div>
           </button>
@@ -1875,10 +1875,10 @@ const AiMenu = ({
             <IconLayout size={16} />
             <div>
               <span className="ai-toolbar-menu-title">
-                Replace with deeper structure
+                Replace with better workflow
               </span>
               <span className="ai-toolbar-menu-caption">
-                Rebuild current subtopics
+                Rebuild process structure
               </span>
             </div>
           </button>
