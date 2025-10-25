@@ -393,9 +393,13 @@ const getLayoutedElements = (
   nodes: MindmapNode[],
   edges: MindmapEdge[],
 ): { nodes: MindmapNode[]; edges: MindmapEdge[] } => {
-  // Find root node (level 0)
-  const rootNode = nodes.find((n) => n.data.level === 0);
-  if (!rootNode) return { nodes, edges };
+  const nodesById = new Map(nodes.map((node) => [node.id, node]));
+
+  // Identify root nodes (level 0)
+  const rootNodes = nodes.filter((node) => node.data.level === 0);
+  if (rootNodes.length === 0) {
+    return { nodes, edges };
+  }
 
   // Build parent-child relationships
   const childrenMap: Map<string, MindmapNode[]> = new Map();
@@ -410,53 +414,89 @@ const getLayoutedElements = (
   });
 
   const layoutedNodes: MindmapNode[] = [];
+  const processed = new Set<string>();
   const startX = 100;
   const startY = 300;
-  const horizontalSpacing = 400; // Distance between levels
-  const verticalSpacing = 150; // Distance between siblings
+  const horizontalSpacing = 400;
+  const verticalSpacing = 150;
 
-  // Position nodes recursively
-  let currentYOffset = 0;
-
-  const positionNode = (
-    node: MindmapNode,
-    x: number,
-    yStart: number,
-  ): number => {
-    const children = childrenMap.get(node.id) || [];
-
-    if (children.length === 0) {
-      // Leaf node - position at current Y offset
-      layoutedNodes.push({
-        ...node,
-        position: { x, y: yStart + currentYOffset * verticalSpacing },
-      });
-      currentYOffset += 1;
-      return yStart + (currentYOffset - 1) * verticalSpacing;
+  const layoutSubtree = (root: MindmapNode) => {
+    if (processed.has(root.id)) {
+      return;
     }
 
-    // Position all children first
-    const childYPositions: number[] = [];
-    children.forEach((child) => {
-      const childY = positionNode(child, x + horizontalSpacing, yStart);
-      childYPositions.push(childY);
+    let currentYOffset = 0;
+    const branchAssignments = new Map<string, { x: number; y: number }>();
+    const branchOrder: string[] = [];
+
+    const placeNode = (node: MindmapNode, x: number, yBase: number): number => {
+      if (branchAssignments.has(node.id)) {
+        return branchAssignments.get(node.id)!.y;
+      }
+
+      branchOrder.push(node.id);
+      const children = childrenMap.get(node.id) || [];
+
+      if (children.length === 0) {
+        const y = yBase + currentYOffset * verticalSpacing;
+        branchAssignments.set(node.id, { x, y });
+        currentYOffset += 1;
+        return y;
+      }
+
+      const childPositions: number[] = [];
+      children.forEach((child) => {
+        const childY = placeNode(child, x + horizontalSpacing, yBase);
+        childPositions.push(childY);
+      });
+
+      const firstChildY = childPositions[0];
+      const lastChildY = childPositions[childPositions.length - 1];
+      const parentY = (firstChildY + lastChildY) / 2;
+      branchAssignments.set(node.id, { x, y: parentY });
+      return parentY;
+    };
+
+    const baseX = root.position?.x ?? startX;
+    const baseY = root.position?.y ?? startY;
+    const computedRootY = placeNode(root, baseX, baseY);
+    const desiredRootY = root.position?.y ?? baseY;
+    const deltaY = desiredRootY - computedRootY;
+
+    branchOrder.forEach((id) => {
+      if (processed.has(id)) {
+        return;
+      }
+      const original = nodesById.get(id);
+      const assigned = branchAssignments.get(id);
+      if (!original || !assigned) {
+        return;
+      }
+      const adjustedY = assigned.y + deltaY;
+      const adjustedPosition = { x: assigned.x, y: adjustedY };
+      layoutedNodes.push({
+        ...original,
+        position: adjustedPosition,
+        positionAbsolute: adjustedPosition,
+      });
+      processed.add(id);
     });
-
-    // Position parent at the midpoint of children
-    const firstChildY = childYPositions[0];
-    const lastChildY = childYPositions[childYPositions.length - 1];
-    const parentY = (firstChildY + lastChildY) / 2;
-
-    layoutedNodes.push({
-      ...node,
-      position: { x, y: parentY },
-    });
-
-    return parentY;
   };
 
-  // Start positioning from root
-  positionNode(rootNode, startX, startY);
+  const orderedRoots = [...rootNodes].sort((a, b) => {
+    const ay = a.position?.y ?? startY;
+    const by = b.position?.y ?? startY;
+    return ay - by;
+  });
+
+  orderedRoots.forEach((root) => layoutSubtree(root));
+
+  nodes.forEach((node) => {
+    if (processed.has(node.id)) {
+      return;
+    }
+    layoutedNodes.push({ ...node });
+  });
 
   return { nodes: layoutedNodes, edges };
 };
