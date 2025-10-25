@@ -1,5 +1,6 @@
 import "@xyflow/react/dist/style.css";
 import "./mindmap-master.css";
+import "./ai-chat-panel-v2.css";
 
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
@@ -38,13 +39,13 @@ import {
 import { generateMindmapSuggestions, MindmapAiError } from "@/ai/client";
 import type { MindmapAiSuggestion, MindmapContextPayload } from "@/ai/types";
 import {
-  AIChatPanel,
+  AIChatPanelV2 as AIChatPanel,
   type AIChatPanelMessage,
   type AIChatPanelNodeSummary,
   type AIChatPanelPhase,
   type AIChatPanelQuickAction,
   type AIIntent,
-} from "@/components/AIChatPanel";
+} from "@/components/AIChatPanel-v2";
 import {
   IconAI,
   IconCollapse,
