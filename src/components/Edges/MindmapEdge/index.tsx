@@ -1,4 +1,9 @@
-import { BaseEdge, type EdgeProps, getSmoothStepPath } from '@xyflow/react';
+import {
+  BaseEdge,
+  type EdgeProps,
+  getSmoothStepPath,
+  getStraightPath,
+} from '@xyflow/react';
 import { memo } from 'react';
 
 import './styles.css';
@@ -15,15 +20,23 @@ export const MindmapEdge = memo(
     style = {},
     markerEnd,
   }: EdgeProps) => {
-    const [edgePath] = getSmoothStepPath({
-      sourceX,
-      sourceY,
-      sourcePosition,
-      targetX,
-      targetY,
-      targetPosition,
-      borderRadius: 20,
-    });
+    const isHorizontal = Math.abs(sourceY - targetY) < 0.5;
+    const [edgePath] = isHorizontal
+      ? getStraightPath({
+          sourceX,
+          sourceY,
+          targetX,
+          targetY,
+        })
+      : getSmoothStepPath({
+          sourceX,
+          sourceY,
+          sourcePosition,
+          targetX,
+          targetY,
+          targetPosition,
+          borderRadius: 20,
+        });
 
     return (
       <>

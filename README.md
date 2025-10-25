@@ -1,8 +1,8 @@
-# ReactFlow Auto Layout Demo
+# Thinkify
 
-A demonstration of auto-layout capabilities and Figma-like edge editing features built with [ReactFlow](https://reactflow.dev).
+A powerful mindmapping and flowchart application with auto-layout capabilities and Figma-like edge editing features built with [ReactFlow](https://reactflow.dev).
 
-👉 **Live Demo:** [https://reactflow-auto-layout.vercel.app](https://reactflow-auto-layout.vercel.app/)
+👉 **Live Demo:** [https://thinkify.vercel.app](https://thinkify.vercel.app/)
 
 ## ✨ Features
 
@@ -50,7 +50,7 @@ The project is organized into functional modules that can be easily adapted for 
 - [src/components/Edges/EdgeController/index.tsx](./src/components/Edges/EdgeController/index.tsx): Edge segment drag event handling
 - [src/components/Edges/EdgeController/smart-edge.ts](./src/components/Edges/EdgeController/smart-edge.ts): Figma-like edge auto-merging and splitting logic
 
-While the codebase may appear complex at first glance, the underlying logic is relatively straightforward. Feel free to open an [issue](https://github.com/idootop/reactflow-auto-layout/issues) if you have any questions.
+While the codebase may appear complex at first glance, the underlying logic is relatively straightforward. Feel free to open an [issue](https://github.com/idootop/thinkify/issues) if you have any questions.
 
 ## 🤖 AI Assistant (experimental)
 
@@ -69,4 +69,4 @@ This project builds upon the work of many others:
 1. [ReactFlow](https://reactflow.dev/) — The powerful diagram engine that powers this project
 2. [flanksource-ui](https://github.com/flanksource/flanksource-ui/blob/75b35591d3bbc7d446fa326d0ca7536790f38d88/src/ui/Graphs/Layouts/algorithms/d3-hierarchy.ts) — Reference implementation for the [D3-hierarchy](https://github.com/d3/d3-hierarchy) auto-layout approach
 3. [LogicFlow 边的绘制与交互](https://juejin.cn/post/6942727734518874142) — Inspiration for the edge auto-routing implementation
-4. [a3ng7n](https://github.com/a3ng7n) — For the excellent [English comment translations](https://github.com/idootop/reactflow-auto-layout/pull/1)
+4. [a3ng7n](https://github.com/a3ng7n) — For the excellent [English comment translations](https://github.com/idootop/thinkify/pull/1)
