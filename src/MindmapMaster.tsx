@@ -1475,6 +1475,7 @@ interface ToolbarProps {
   onRedo: () => void;
   canUndo: boolean;
   canRedo: boolean;
+  onOpenAIFromToolbar: () => void;
 }
 
 const Toolbar = ({
@@ -1487,6 +1488,7 @@ const Toolbar = ({
   onRedo,
   canUndo,
   canRedo,
+  onOpenAIFromToolbar,
 }: ToolbarProps) => (
   <Panel
     className="mindmap-toolbar"
@@ -1569,6 +1571,20 @@ const Toolbar = ({
           type="button"
         >
           <IconTrash size={18} />
+        </button>
+      </div>
+
+      <span className="toolbar-divider" />
+
+      <div className="toolbar-stack-group">
+        <button
+          aria-label="Open AI assistant"
+          className="toolbar-icon toolbar-icon--accent"
+          onClick={onOpenAIFromToolbar}
+          title="Open AI assistant"
+          type="button"
+        >
+          <IconAI size={18} />
         </button>
       </div>
     </div>
@@ -2326,6 +2342,18 @@ const MindmapMasterFlow = () => {
   const closeAiPanel = useCallback(() => {
     setAiPanelOpen(false);
   }, []);
+
+  const openAiPanelFromToolbar = useCallback(() => {
+    const preferredId =
+      selectedNodeId ??
+      nodesRef.current.find((node) => node.data.level === 0)?.id ??
+      nodesRef.current[0]?.id ??
+      null;
+
+    if (preferredId) {
+      openAiPanel(preferredId);
+    }
+  }, [openAiPanel, selectedNodeId]);
 
   useEffect(() => {
     if (!isAiPanelOpen) {
@@ -3905,6 +3933,7 @@ const MindmapMasterFlow = () => {
             onClear={clearAll}
             onExport={exportData}
             onImport={importData}
+            onOpenAIFromToolbar={openAiPanelFromToolbar}
             onRedo={redo}
             onUndo={undo}
           />

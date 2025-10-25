@@ -758,6 +758,18 @@
   border-color: rgba(239, 68, 68, 0.75);
 }
 
+.toolbar-icon.toolbar-icon--accent {
+  color: #0f172a;
+  background: rgba(248, 250, 252, 0.92);
+  border-color: rgba(148, 163, 184, 0.45);
+}
+
+.toolbar-icon.toolbar-icon--accent:hover:not(:disabled) {
+  background: rgba(224, 231, 255, 0.95);
+  border-color: rgba(99, 102, 241, 0.6);
+  box-shadow: 0 8px 18px rgba(99, 102, 241, 0.22);
+}
+
 .toolbar-icon:disabled {
   cursor: not-allowed;
   box-shadow: none;
