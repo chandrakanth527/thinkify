@@ -110,7 +110,49 @@ const COLORS = [
   { name: 'Rose', value: '#F8BBD0' },
 ];
 
-const EMOJIS = ['💡', '⭐', '🎯', '🚀', '💎', '🔥', '✨', '🎨', '📌', '🏆'];
+const EMOJI_CATEGORIES = {
+  'Symbols': {
+    icon: '⭐',
+    emojis: ['💡', '⭐', '🎯', '🚀', '💎', '🔥', '✨', '🎨', '📌', '🏆', '💯', '⚡', '🌟', '💫', '🎪', '🎭', '🎬', '🎤', '🎧', '🎼']
+  },
+  'Nature': {
+    icon: '🌸',
+    emojis: ['🌈', '🌙', '☀️', '⛅', '🌤️', '⛈️', '🌊', '🌸', '🌺', '🌻', '🌹', '🌷', '🌴', '🌲', '🌳', '🍀', '🌿', '🍁', '🍂', '🍃']
+  },
+  'Objects': {
+    icon: '💻',
+    emojis: ['📱', '💻', '⌨️', '🖥️', '🖨️', '🖱️', '📡', '🔧', '🔨', '⚙️', '🛠️', '⚔️', '🗡️', '🏹', '🎯', '📐', '📏', '📊', '📈', '📉']
+  },
+  'Food': {
+    icon: '🍕',
+    emojis: ['🍕', '🍔', '🍟', '🌭', '🍿', '🧂', '🍎', '🍊', '🍋', '🍌', '🍉', '🍇', '🍓', '🫐', '🍈', '🍒', '🍑', '🥭', '🍍', '☕']
+  },
+  'Sports': {
+    icon: '⚽',
+    emojis: ['⚽', '🏀', '🏈', '⚾', '🎾', '🏐', '🏉', '🥏', '🎱', '🪀', '🏓', '🏸', '🏒', '🏑', '🥍', '🏏', '🪃', '🥅', '⛳', '🎣']
+  },
+  'Faces': {
+    icon: '😊',
+    emojis: ['😀', '😃', '😄', '😁', '😅', '😂', '🤣', '😊', '😇', '🙂', '😉', '😌', '😍', '🥰', '😘', '😗', '😙', '😚', '😋', '😛']
+  },
+  'Hearts': {
+    icon: '❤️',
+    emojis: ['❤️', '🧡', '💛', '💚', '💙', '💜', '🖤', '🤍', '🤎', '💔', '❣️', '💕', '💞', '💓', '💗', '💖', '💘', '💝', '💟', '☮️']
+  },
+  'Hands': {
+    icon: '👍',
+    emojis: ['👍', '👎', '👌', '✌️', '🤞', '🤟', '🤘', '🤙', '👈', '👉', '👆', '👇', '☝️', '✋', '🤚', '🖐️', '🖖', '👋', '🤝', '🙏']
+  },
+  'Animals': {
+    icon: '🐶',
+    emojis: ['🐶', '🐱', '🐭', '🐹', '🐰', '🦊', '🐻', '🐼', '🐨', '🐯', '🦁', '🐮', '🐷', '🐸', '🐵', '🐔', '🐧', '🐦', '🐤', '🦆']
+  },
+  'Travel': {
+    icon: '🚗',
+    emojis: ['🚗', '🚕', '🚙', '🚌', '🚎', '🏎️', '🚓', '🚑', '🚒', '🚐', '✈️', '🛫', '🛬', '🚁', '🚂', '🚆', '🚇', '🚊', '🚝', '🚄']
+  }
+};
+
 
 const STATUS_OPTIONS = [
   {
@@ -1685,6 +1727,7 @@ const NodeActionToolbar = ({
   const [showColors, setShowColors] = useState(false);
   const [showEmojis, setShowEmojis] = useState(false);
   const [showStatus, setShowStatus] = useState(false);
+  const [activeEmojiCategory, setActiveEmojiCategory] = useState<string>('Symbols');
   const transform = useStore((state) => state.transform);
   const storeNode = useStore(
     useCallback(
@@ -1836,30 +1879,47 @@ const NodeActionToolbar = ({
           </button>
           {showEmojis && (
             <div className="floating-popover emoji-picker">
-              {EMOJIS.map((emoji) => (
+              <div className="emoji-tabs">
+                {Object.entries(EMOJI_CATEGORIES).map(([category, data]) => (
+                  <button
+                    className={activeEmojiCategory === category ? 'emoji-tab active' : 'emoji-tab'}
+                    key={category}
+                    onClick={() => setActiveEmojiCategory(category)}
+                    title={category}
+                    type="button"
+                  >
+                    {data.icon}
+                  </button>
+                ))}
+              </div>
+              <div className="emoji-grid">
+                {EMOJI_CATEGORIES[activeEmojiCategory as keyof typeof EMOJI_CATEGORIES].emojis.map((emoji) => (
+                  <button
+                    className="emoji-option"
+                    key={emoji}
+                    onClick={() => {
+                      onEmojiChange(emoji);
+                      setShowEmojis(false);
+                    }}
+                    type="button"
+                  >
+                    {emoji}
+                  </button>
+                ))}
+              </div>
+              <div className="emoji-footer">
                 <button
-                  className="emoji-option"
-                  key={emoji}
+                  className="emoji-remove-btn"
                   onClick={() => {
-                    onEmojiChange(emoji);
+                    onEmojiChange('');
                     setShowEmojis(false);
                   }}
+                  title="Remove emoji"
                   type="button"
                 >
-                  {emoji}
+                  Remove emoji
                 </button>
-              ))}
-              <button
-                className="emoji-option"
-                onClick={() => {
-                  onEmojiChange('');
-                  setShowEmojis(false);
-                }}
-                title="Remove emoji"
-                type="button"
-              >
-                <IconMore size={18} />
-              </button>
+              </div>
             </div>
           )}
         </div>
