@@ -52,6 +52,7 @@ import {
   IconDownload,
   IconExpand,
   IconMore,
+  IconNote,
   IconPalette,
   IconPlus,
   IconRedo,
