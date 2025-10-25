@@ -46,12 +46,12 @@ import {
 } from '@/components/AIChatPanel-v2';
 import {
   IconAI,
+  IconAlignLeft,
   IconAutoLayout,
   IconCollapse,
   IconDownload,
   IconExpand,
   IconMore,
-  IconNote,
   IconPalette,
   IconPlus,
   IconRedo,
@@ -60,6 +60,10 @@ import {
   IconUndo,
   IconUpload,
 } from '@/icons';
+import {
+  DEFAULT_HORIZONTAL_GAP,
+  DEFAULT_VERTICAL_GAP,
+} from '@/mindmap/layout';
 
 // ==================== TYPES ====================
 
@@ -77,6 +81,12 @@ interface MindmapNodeData extends Record<string, unknown> {
   // AI Planning fields
   description?: string;
   status?: 'not-started' | 'in-progress' | 'completed' | 'blocked';
+
+  // Onboarding field - force expanded state
+  forceExpanded?: boolean;
+  // User-controlled persistent expansion (survives clicks outside)
+  persistExpanded?: boolean;
+  order?: number;
 }
 
 type MindmapNode = Node<MindmapNodeData, 'mindmap' | 'edge-note'> & {
@@ -136,6 +146,7 @@ const normalizeStatus = (value?: MindmapNodeData['status']): StatusValue =>
 
 const FLOW_STORAGE_KEY = 'mindmap-flow-state.v1';
 const AI_CONVERSATION_STORAGE_KEY = 'mindmap-ai-conversations.v1';
+const ONBOARDING_SEEN_KEY = 'mindmap-onboarding-seen.v1';
 
 const AI_INTENT_META: Record<
   AIIntent,
@@ -417,8 +428,32 @@ const getLayoutedElements = (
   const processed = new Set<string>();
   const startX = 100;
   const startY = 300;
-  const horizontalSpacing = 400;
-  const verticalSpacing = 150;
+  const horizontalSpacing = 500; // Increased horizontal spacing between parent and children
+  const minVerticalGap = 40; // Reduced minimum gap between nodes
+
+  // Get the actual height of a node, considering measured dimensions
+  const getNodeHeight = (node: MindmapNode): number => {
+    // Use measured height if available, otherwise estimate
+    if (node.measured?.height) {
+      return node.measured.height;
+    }
+    if (node.height) {
+      return node.height;
+    }
+
+    // Estimate based on content
+    const baseHeight = 60; // Base collapsed height
+
+    // If node has expanded description, estimate a larger height
+    if (node.data.persistExpanded || (node.data.description && node.data.forceExpanded)) {
+      const descLength = node.data.description?.length ?? 0;
+      // Estimate: ~20px per 100 characters, min 100px, max 400px for description
+      const descHeight = Math.min(400, Math.max(100, Math.ceil(descLength / 100) * 20));
+      return baseHeight + descHeight + 40; // Add padding
+    }
+
+    return baseHeight;
+  };
 
   const layoutSubtree = (root: MindmapNode) => {
     if (processed.has(root.id)) {
@@ -438,9 +473,11 @@ const getLayoutedElements = (
       const children = childrenMap.get(node.id) || [];
 
       if (children.length === 0) {
-        const y = yBase + currentYOffset * verticalSpacing;
+        // Use actual node height + minimum gap for spacing
+        const nodeHeight = getNodeHeight(node);
+        const y = yBase + currentYOffset;
         branchAssignments.set(node.id, { x, y });
-        currentYOffset += 1;
+        currentYOffset += nodeHeight + minVerticalGap;
         return y;
       }
 
@@ -538,7 +575,9 @@ const applyCollapseState = (
 const MindmapNodeComponent = ({ data, id, selected }: any) => {
   const [label, setLabel] = useState(data.label);
   const [description, setDescription] = useState(data.description || '');
-  const [isExpanded, setIsExpanded] = useState(Boolean(selected));
+  const [isExpanded, setIsExpanded] = useState(
+    data.forceExpanded || data.persistExpanded ? true : Boolean(selected),
+  );
   const [isTitleFocused, setIsTitleFocused] = useState(false);
   const [isDescriptionFocused, setIsDescriptionFocused] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -563,11 +602,14 @@ const MindmapNodeComponent = ({ data, id, selected }: any) => {
     }
   }, [data.description, isDescriptionFocused]);
 
+  // Update expansion based on persistExpanded or selection
   useEffect(() => {
-    if (!selected) {
-      setIsExpanded(false);
+    if (data.persistExpanded || data.forceExpanded) {
+      setIsExpanded(true);
+    } else {
+      setIsExpanded(Boolean(selected));
     }
-  }, [selected]);
+  }, [selected, data.persistExpanded, data.forceExpanded]);
 
   useEffect(() => {
     emitResize();
@@ -1600,6 +1642,7 @@ interface NodeActionToolbarProps {
   onEmojiChange: (emoji: string) => void;
   onToggleCollapse: (nodeId: string, collapsed: boolean) => void;
   onStatusChange: (nodeId: string, status: StatusValue) => void;
+  onTogglePersistExpanded: (nodeId: string, persistExpanded: boolean) => void;
   onOpenAI: (nodeId: string, intentOverride?: AIIntent) => void;
   isAiActive: boolean;
 }
@@ -1634,6 +1677,7 @@ const NodeActionToolbar = ({
   onEmojiChange,
   onToggleCollapse,
   onStatusChange,
+  onTogglePersistExpanded,
   onOpenAI,
   isAiActive,
 }: NodeActionToolbarProps) => {
@@ -1697,6 +1741,7 @@ const NodeActionToolbar = ({
   }
 
   const isCollapsed = Boolean(node.data?.collapsed);
+  const isPersistExpanded = Boolean(node.data?.persistExpanded);
   const currentStatusMeta = node?.data?.status
     ? STATUS_OPTIONS.find((option) => option.value === node.data.status)
     : null;
@@ -1711,6 +1756,16 @@ const NodeActionToolbar = ({
           type="button"
         >
           {isCollapsed ? <IconExpand size={18} /> : <IconCollapse size={18} />}
+        </button>
+
+        {/* Toggle persistent description expansion */}
+        <button
+          className={isPersistExpanded ? 'icon-btn is-active' : 'icon-btn'}
+          onClick={() => onTogglePersistExpanded(node.id, !isPersistExpanded)}
+          title={isPersistExpanded ? 'Hide description' : 'Show description'}
+          type="button"
+        >
+          <IconAlignLeft size={18} />
         </button>
 
         <div className="floating-divider" />
@@ -1877,24 +1932,313 @@ const NodeActionToolbar = ({
 // ==================== MAIN APP ====================
 
 const MindmapMasterFlow = () => {
-  const initialNodes: MindmapNode[] = [
-    {
-      id: 'root',
-      type: 'mindmap',
-      position: { ...DEFAULT_VIEWPORT_CENTER },
-      positionAbsolute: { ...DEFAULT_VIEWPORT_CENTER },
-      data: {
-        label: 'My Mindmap',
-        level: 0,
-        variant: 'topic',
-        color: COLORS[0].value,
-        // AI Planning fields example
-        status: 'in-progress',
-        description:
-          'Build an AI-powered mindmap tool for structured problem-solving. This tool will help break down complex tasks into manageable pieces and track progress.',
+  // Check if user has seen onboarding
+  const hasSeenOnboarding = useMemo(() => {
+    if (typeof window === 'undefined') return true;
+    try {
+      return window.localStorage.getItem(ONBOARDING_SEEN_KEY) === 'true';
+    } catch {
+      return true;
+    }
+  }, []);
+
+  const initialNodes: MindmapNode[] = useMemo(() => {
+    // If user has seen onboarding, show simple default node
+    if (hasSeenOnboarding) {
+      return [
+        {
+          id: 'root',
+          type: 'mindmap',
+          position: { ...DEFAULT_VIEWPORT_CENTER },
+          positionAbsolute: { ...DEFAULT_VIEWPORT_CENTER },
+          data: {
+            label: 'My Mindmap',
+            level: 0,
+            variant: 'topic',
+            color: COLORS[0].value,
+            status: 'not-started',
+          },
+        },
+      ];
+    }
+
+    // First-time user: show comprehensive onboarding nodes
+    // We'll manually position these for a clean tutorial flow with extra spacing
+    const startX = DEFAULT_VIEWPORT_CENTER.x - 400;
+    const startY = DEFAULT_VIEWPORT_CENTER.y - 800;
+    const hGap = DEFAULT_HORIZONTAL_GAP * 1.5; // 420px - more space for descriptions
+    const vGap = DEFAULT_VERTICAL_GAP * 1.8; // 216px - more vertical space
+
+    return [
+      // Main welcome root
+      {
+        id: 'onboard-welcome',
+        type: 'mindmap',
+        position: { x: startX, y: startY + 800 },
+        data: {
+          label: '👋 Welcome to Thinkify!',
+          level: 0,
+          variant: 'topic',
+          color: COLORS[4].value, // Blush
+          emoji: '🎉',
+          status: 'completed',
+          description: 'Your AI-powered mindmap for structured thinking and project planning. Delete any node here to start your own mindmap!',
+          forceExpanded: false, // Keep L0 collapsed
+        },
       },
-    },
-  ];
+
+      // === ROOT 1: Getting Started ===
+      {
+        id: 'onboard-start',
+        type: 'mindmap',
+        position: { x: startX + hGap, y: startY },
+        data: {
+          label: '🚀 Getting Started',
+          level: 1,
+          variant: 'topic',
+          color: COLORS[5].value, // Lemon
+          status: 'in-progress',
+          description: 'Learn the basics: click nodes, use toolbar, and navigate the canvas',
+          forceExpanded: false, // Keep L1 collapsed
+        },
+      },
+      // Children of Getting Started
+      {
+        id: 'onboard-start-click',
+        type: 'mindmap',
+        position: { x: startX + hGap * 2, y: startY - vGap },
+        data: {
+          label: 'Click Any Node',
+          level: 2,
+          variant: 'topic',
+          color: COLORS[5].value,
+          status: 'completed',
+          description: 'Click to select • See floating toolbar appear above • Edit text inline by clicking the node label',
+          forceExpanded: true,
+        },
+      },
+      {
+        id: 'onboard-start-toolbar',
+        type: 'mindmap',
+        position: { x: startX + hGap * 2, y: startY },
+        data: {
+          label: 'Floating Toolbar',
+          level: 2,
+          variant: 'topic',
+          color: COLORS[5].value,
+          status: 'completed',
+          description: '➕ Add child • 🎨 Change color • 😊 Add emoji • 🎯 Set status • 🗑️ Delete node',
+          forceExpanded: true,
+        },
+      },
+      {
+        id: 'onboard-start-canvas',
+        type: 'mindmap',
+        position: { x: startX + hGap * 2, y: startY + vGap },
+        data: {
+          label: 'Canvas Navigation',
+          level: 2,
+          variant: 'topic',
+          color: COLORS[5].value,
+          status: 'completed',
+          description: 'Drag canvas to pan • Scroll to zoom • Drag nodes to reposition (manual mode)',
+          forceExpanded: true,
+        },
+      },
+
+      // === ROOT 2: AI Assistant ===
+      {
+        id: 'onboard-ai',
+        type: 'mindmap',
+        position: { x: startX + hGap, y: startY + vGap * 2.5 },
+        data: {
+          label: '🤖 AI Assistant',
+          level: 1,
+          variant: 'topic',
+          color: COLORS[3].value, // Sky
+          emoji: '✨',
+          status: 'completed',
+          description: 'Generate ideas and expand your mindmap with AI',
+          forceExpanded: false, // Keep L1 collapsed
+        },
+      },
+      // Children of AI Assistant
+      {
+        id: 'onboard-ai-how',
+        type: 'mindmap',
+        position: { x: startX + hGap * 2, y: startY + vGap * 2 },
+        data: {
+          label: 'How to Use',
+          level: 2,
+          variant: 'topic',
+          color: COLORS[3].value,
+          status: 'completed',
+          description: 'Select a node • Click AI sparkle icon in toolbar • Choose mode and ask for ideas',
+          forceExpanded: true,
+        },
+      },
+      {
+        id: 'onboard-ai-spark',
+        type: 'mindmap',
+        position: { x: startX + hGap * 2, y: startY + vGap * 2.5 },
+        data: {
+          label: 'Spark Content Mode',
+          level: 2,
+          variant: 'topic',
+          color: COLORS[3].value,
+          status: 'completed',
+          description: 'Generate concrete deliverables • Chapters, features, components • Real content items',
+          forceExpanded: true,
+        },
+      },
+      {
+        id: 'onboard-ai-deepen',
+        type: 'mindmap',
+        position: { x: startX + hGap * 2, y: startY + vGap * 3 },
+        data: {
+          label: 'Deepen Workflow Mode',
+          level: 2,
+          variant: 'topic',
+          color: COLORS[3].value,
+          status: 'completed',
+          description: 'Generate process steps • Research → Plan → Execute • Workflow and methodology',
+          forceExpanded: true,
+        },
+      },
+
+      // === ROOT 3: Features & Tools ===
+      {
+        id: 'onboard-features',
+        type: 'mindmap',
+        position: { x: startX + hGap, y: startY + vGap * 5 },
+        data: {
+          label: '⚙️ Features & Tools',
+          level: 1,
+          variant: 'topic',
+          color: COLORS[2].value, // Mint
+          status: 'completed',
+          description: 'Explore all the powerful features available',
+          forceExpanded: false, // Keep L1 collapsed
+        },
+      },
+      // Children of Features
+      {
+        id: 'onboard-features-customize',
+        type: 'mindmap',
+        position: { x: startX + hGap * 2, y: startY + vGap * 4 },
+        data: {
+          label: 'Customize Nodes',
+          level: 2,
+          variant: 'topic',
+          color: COLORS[2].value,
+          status: 'completed',
+          description: '10 beautiful colors • 10 expressive emojis • Rich text editing • Add descriptions',
+          forceExpanded: true,
+        },
+      },
+      {
+        id: 'onboard-features-status',
+        type: 'mindmap',
+        position: { x: startX + hGap * 2, y: startY + vGap * 4.75 },
+        data: {
+          label: 'Track Progress',
+          level: 2,
+          variant: 'topic',
+          color: COLORS[2].value,
+          status: 'in-progress',
+          description: 'Not Started • In Progress • Completed • Blocked • Visual status indicators',
+          forceExpanded: true,
+        },
+      },
+      {
+        id: 'onboard-features-organize',
+        type: 'mindmap',
+        position: { x: startX + hGap * 2, y: startY + vGap * 5.5 },
+        data: {
+          label: 'Auto Organization',
+          level: 2,
+          variant: 'topic',
+          color: COLORS[2].value,
+          status: 'completed',
+          description: 'Auto-layout algorithm • Collapse/expand branches • Clean tree structure',
+          forceExpanded: true,
+        },
+      },
+      {
+        id: 'onboard-features-history',
+        type: 'mindmap',
+        position: { x: startX + hGap * 2, y: startY + vGap * 6.25 },
+        data: {
+          label: 'Undo/Redo',
+          level: 2,
+          variant: 'topic',
+          color: COLORS[2].value,
+          status: 'completed',
+          description: 'Full history tracking • Undo mistakes • Redo changes • Never lose work',
+          forceExpanded: true,
+        },
+      },
+
+      // === ROOT 4: Controls & Tips ===
+      {
+        id: 'onboard-controls',
+        type: 'mindmap',
+        position: { x: startX + hGap, y: startY + vGap * 7.75 },
+        data: {
+          label: '🎮 Controls & Tips',
+          level: 1,
+          variant: 'topic',
+          color: COLORS[0].value, // Lavender
+          status: 'completed',
+          description: 'Master the interface and shortcuts',
+          forceExpanded: false, // Keep L1 collapsed
+        },
+      },
+      // Children of Controls
+      {
+        id: 'onboard-controls-right',
+        type: 'mindmap',
+        position: { x: startX + hGap * 2, y: startY + vGap * 7 },
+        data: {
+          label: 'Right Side Controls',
+          level: 2,
+          variant: 'topic',
+          color: COLORS[0].value,
+          status: 'completed',
+          description: 'Zoom buttons • Fit view • Lock/unlock • Center canvas • Minimap',
+          forceExpanded: true,
+        },
+      },
+      {
+        id: 'onboard-controls-save',
+        type: 'mindmap',
+        position: { x: startX + hGap * 2, y: startY + vGap * 8.5 },
+        data: {
+          label: 'Auto-Save',
+          level: 2,
+          variant: 'topic',
+          color: COLORS[0].value,
+          status: 'completed',
+          description: 'Everything saves automatically to browser • Export to backup • Import to restore',
+          forceExpanded: true,
+        },
+      },
+      {
+        id: 'onboard-controls-notes',
+        type: 'mindmap',
+        position: { x: startX + hGap * 2, y: startY + vGap * 9.25 },
+        data: {
+          label: 'Edge Notes',
+          level: 2,
+          variant: 'topic',
+          color: COLORS[0].value,
+          status: 'completed',
+          description: 'Add notes to connections • Annotate relationships • Context and details',
+          forceExpanded: true,
+        },
+      },
+    ];
+  }, [hasSeenOnboarding]);
 
   const savedFlow = useMemo<StoredFlowState | null>(() => {
     if (typeof window === 'undefined') {
@@ -2015,11 +2359,184 @@ const MindmapMasterFlow = () => {
   const hasSavedFlow = Boolean(savedFlow);
   const savedViewport = savedFlow?.viewport ?? null;
 
+  // Create initial edges for onboarding nodes
+  const initialEdges: MindmapEdge[] = useMemo(() => {
+    if (hasSeenOnboarding || hasSavedFlow) {
+      return [];
+    }
+
+    // Edges connecting all onboarding nodes
+    return [
+      // Welcome root to main sections
+      {
+        id: 'e-welcome-start',
+        source: 'onboard-welcome',
+        target: 'onboard-start',
+        sourceHandle: 'onboard-welcome-right',
+        targetHandle: 'onboard-start-left',
+        type: 'simplebezier',
+        style: { stroke: '#cbd5e1', strokeWidth: 2.5 },
+      },
+      {
+        id: 'e-welcome-ai',
+        source: 'onboard-welcome',
+        target: 'onboard-ai',
+        sourceHandle: 'onboard-welcome-right',
+        targetHandle: 'onboard-ai-left',
+        type: 'simplebezier',
+        style: { stroke: '#cbd5e1', strokeWidth: 2.5 },
+      },
+      {
+        id: 'e-welcome-features',
+        source: 'onboard-welcome',
+        target: 'onboard-features',
+        sourceHandle: 'onboard-welcome-right',
+        targetHandle: 'onboard-features-left',
+        type: 'simplebezier',
+        style: { stroke: '#cbd5e1', strokeWidth: 2.5 },
+      },
+      {
+        id: 'e-welcome-controls',
+        source: 'onboard-welcome',
+        target: 'onboard-controls',
+        sourceHandle: 'onboard-welcome-right',
+        targetHandle: 'onboard-controls-left',
+        type: 'simplebezier',
+        style: { stroke: '#cbd5e1', strokeWidth: 2.5 },
+      },
+
+      // Getting Started children
+      {
+        id: 'e-start-click',
+        source: 'onboard-start',
+        target: 'onboard-start-click',
+        sourceHandle: 'onboard-start-right',
+        targetHandle: 'onboard-start-click-left',
+        type: 'simplebezier',
+        style: { stroke: '#cbd5e1', strokeWidth: 2.5 },
+      },
+      {
+        id: 'e-start-toolbar',
+        source: 'onboard-start',
+        target: 'onboard-start-toolbar',
+        sourceHandle: 'onboard-start-right',
+        targetHandle: 'onboard-start-toolbar-left',
+        type: 'simplebezier',
+        style: { stroke: '#cbd5e1', strokeWidth: 2.5 },
+      },
+      {
+        id: 'e-start-canvas',
+        source: 'onboard-start',
+        target: 'onboard-start-canvas',
+        sourceHandle: 'onboard-start-right',
+        targetHandle: 'onboard-start-canvas-left',
+        type: 'simplebezier',
+        style: { stroke: '#cbd5e1', strokeWidth: 2.5 },
+      },
+
+      // AI Assistant children
+      {
+        id: 'e-ai-how',
+        source: 'onboard-ai',
+        target: 'onboard-ai-how',
+        sourceHandle: 'onboard-ai-right',
+        targetHandle: 'onboard-ai-how-left',
+        type: 'simplebezier',
+        style: { stroke: '#cbd5e1', strokeWidth: 2.5 },
+      },
+      {
+        id: 'e-ai-spark',
+        source: 'onboard-ai',
+        target: 'onboard-ai-spark',
+        sourceHandle: 'onboard-ai-right',
+        targetHandle: 'onboard-ai-spark-left',
+        type: 'simplebezier',
+        style: { stroke: '#cbd5e1', strokeWidth: 2.5 },
+      },
+      {
+        id: 'e-ai-deepen',
+        source: 'onboard-ai',
+        target: 'onboard-ai-deepen',
+        sourceHandle: 'onboard-ai-right',
+        targetHandle: 'onboard-ai-deepen-left',
+        type: 'simplebezier',
+        style: { stroke: '#cbd5e1', strokeWidth: 2.5 },
+      },
+
+      // Features & Tools children
+      {
+        id: 'e-features-customize',
+        source: 'onboard-features',
+        target: 'onboard-features-customize',
+        sourceHandle: 'onboard-features-right',
+        targetHandle: 'onboard-features-customize-left',
+        type: 'simplebezier',
+        style: { stroke: '#cbd5e1', strokeWidth: 2.5 },
+      },
+      {
+        id: 'e-features-status',
+        source: 'onboard-features',
+        target: 'onboard-features-status',
+        sourceHandle: 'onboard-features-right',
+        targetHandle: 'onboard-features-status-left',
+        type: 'simplebezier',
+        style: { stroke: '#cbd5e1', strokeWidth: 2.5 },
+      },
+      {
+        id: 'e-features-organize',
+        source: 'onboard-features',
+        target: 'onboard-features-organize',
+        sourceHandle: 'onboard-features-right',
+        targetHandle: 'onboard-features-organize-left',
+        type: 'simplebezier',
+        style: { stroke: '#cbd5e1', strokeWidth: 2.5 },
+      },
+      {
+        id: 'e-features-history',
+        source: 'onboard-features',
+        target: 'onboard-features-history',
+        sourceHandle: 'onboard-features-right',
+        targetHandle: 'onboard-features-history-left',
+        type: 'simplebezier',
+        style: { stroke: '#cbd5e1', strokeWidth: 2.5 },
+      },
+
+      // Controls & Tips children
+      {
+        id: 'e-controls-right',
+        source: 'onboard-controls',
+        target: 'onboard-controls-right',
+        sourceHandle: 'onboard-controls-right',
+        targetHandle: 'onboard-controls-right-left',
+        type: 'simplebezier',
+        style: { stroke: '#cbd5e1', strokeWidth: 2.5 },
+      },
+      {
+        id: 'e-controls-save',
+        source: 'onboard-controls',
+        target: 'onboard-controls-save',
+        sourceHandle: 'onboard-controls-right',
+        targetHandle: 'onboard-controls-save-left',
+        type: 'simplebezier',
+        style: { stroke: '#cbd5e1', strokeWidth: 2.5 },
+      },
+      {
+        id: 'e-controls-notes',
+        source: 'onboard-controls',
+        target: 'onboard-controls-notes',
+        sourceHandle: 'onboard-controls-right',
+        targetHandle: 'onboard-controls-notes-left',
+        type: 'simplebezier',
+        style: { stroke: '#cbd5e1', strokeWidth: 2.5 },
+      },
+    ];
+  }, [hasSeenOnboarding, hasSavedFlow]);
+
   const [nodes, setNodes, onNodesChange] = useNodesState<MindmapNode>(
     savedFlow?.nodes?.length ? savedFlow.nodes : initialNodes,
   );
   const [edges, setEdges, onEdgesChange] = useEdgesState<MindmapEdge>(
-    savedFlow?.edges ?? [],
+    savedFlow?.edges?.length ? savedFlow.edges : initialEdges,
   );
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [isAiPanelOpen, setAiPanelOpen] = useState(false);
@@ -2370,13 +2887,40 @@ const MindmapMasterFlow = () => {
     ({ nodes: selection }: OnSelectionChangeParams<MindmapNode>) => {
       if (selection.length === 0) {
         setSelectedNodeId(null);
+        // Trigger relayout after deselection to collapse nodes
+        setTimeout(() => {
+          const currentNodes = nodesRef.current;
+          const currentEdges = edgesRef.current;
+          const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(
+            currentNodes,
+            currentEdges,
+          );
+          nodesRef.current = layoutedNodes;
+          edgesRef.current = layoutedEdges;
+          setNodes(layoutedNodes);
+          setEdges(layoutedEdges);
+        }, 50);
         return;
       }
 
       const primary = selection[selection.length - 1];
       setSelectedNodeId(primary.id);
+
+      // Trigger relayout after selection to expand nodes
+      setTimeout(() => {
+        const currentNodes = nodesRef.current;
+        const currentEdges = edgesRef.current;
+        const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(
+          currentNodes,
+          currentEdges,
+        );
+        nodesRef.current = layoutedNodes;
+        edgesRef.current = layoutedEdges;
+        setNodes(layoutedNodes);
+        setEdges(layoutedEdges);
+      }, 50);
     },
-    [],
+    [setNodes, setEdges],
   );
 
   const pushHistory = useCallback(
@@ -3222,6 +3766,18 @@ const MindmapMasterFlow = () => {
         return;
       }
 
+      // Check if any deleted node is an onboarding node - mark onboarding as seen
+      const deletedOnboardingNode = Array.from(nodesToDelete).some(id =>
+        id.startsWith('onboard-')
+      );
+      if (deletedOnboardingNode && typeof window !== 'undefined') {
+        try {
+          window.localStorage.setItem(ONBOARDING_SEEN_KEY, 'true');
+        } catch {
+          // Ignore localStorage errors
+        }
+      }
+
       setAiConversations((prev) => {
         let changed = false;
         const next = { ...prev };
@@ -3461,6 +4017,37 @@ const MindmapMasterFlow = () => {
       });
     },
     [focusNodes, updateGraph],
+  );
+
+  // Toggle persistent description expansion
+  const togglePersistExpanded = useCallback(
+    (nodeId: string, persistExpanded: boolean) => {
+      // First update the node data
+      updateGraph((nodesState, edgesState) => ({
+        nodes: nodesState.map((node) =>
+          node.id === nodeId
+            ? {
+                ...node,
+                data: {
+                  ...node.data,
+                  persistExpanded,
+                },
+              }
+            : node,
+        ),
+        edges: edgesState,
+      }));
+
+      // After a short delay, trigger relayout to account for new node dimensions
+      // This delay allows ReactFlow to measure the expanded/collapsed node
+      setTimeout(() => {
+        updateGraph((nodesState, edgesState) => ({
+          nodes: nodesState,
+          edges: edgesState,
+        }));
+      }, 50);
+    },
+    [updateGraph],
   );
 
   // Add root node
@@ -3953,6 +4540,7 @@ const MindmapMasterFlow = () => {
             onOpenAI={openAiPanel}
             onStatusChange={updateNodeStatus}
             onToggleCollapse={toggleCollapse}
+            onTogglePersistExpanded={togglePersistExpanded}
           />
         </ReactFlow>
       </div>

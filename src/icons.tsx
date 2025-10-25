@@ -139,3 +139,9 @@ export const IconAI = createIcon([
   <path d="M19 3L20 5L22 6L20 7L19 9L18 7L16 6L18 5L19 3Z" key="spark1" />,
   <path d="M5 15L6 17L8 18L6 19L5 21L4 19L2 18L4 17L5 15Z" key="spark2" />,
 ]);
+
+export const IconAlignLeft = createIcon([
+  <path d="M21 6H3" key="line1" />,
+  <path d="M15 12H3" key="line2" />,
+  <path d="M17 18H3" key="line3" />,
+]);
