@@ -36,6 +36,17 @@ export const IconLayout = createIcon([
   <path d="M3 9h18" key="line2" />,
 ]);
 
+export const IconAutoLayout = createIcon([
+  <path d="M12 3v4" key="vert-top" />,
+  <path d="M12 17v4" key="vert-bottom" />,
+  <path d="M3 12h4" key="horiz-left" />,
+  <path d="M17 12h4" key="horiz-right" />,
+  <path d="m9 6 3 3 3-3" key="arrow-up" />,
+  <path d="m9 18 3-3 3 3" key="arrow-down" />,
+  <path d="m6 9 3 3-3 3" key="arrow-left" />,
+  <path d="m18 9-3 3 3 3" key="arrow-right" />,
+]);
+
 export const IconDownload = createIcon([
   <path d="M12 5v11" key="arr" />,
   <path d="m7 11 5 5 5-5" key="tip" />,
@@ -103,6 +114,11 @@ export const IconExpand = createIcon([<path d="m6 15 6-6 6 6" key="arrow" />]);
 export const IconX = createIcon([
   <path d="M18 6 6 18" key="line1" />,
   <path d="m6 6 12 12" key="line2" />,
+]);
+
+export const IconSend = createIcon([
+  <path d="m22 2-9.5 9.5" key="line1" />,
+  <path d="M22 2 15 22 11.5 13.5 3 10Z" key="body" />,
 ]);
 
 export const IconNote = createIcon([

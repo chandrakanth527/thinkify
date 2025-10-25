@@ -16,6 +16,7 @@ IMPORTANT RULES:
 - Generate CONCRETE, ACTIONABLE ITEMS that represent the actual content/output
 - Keep titles under 8 words, descriptions under 40 words
 - Generate only meaningful items (minimum 3, maximum 10) - quality over quantity
+- Never default to providing 5 items; include every strong idea you have (cap at 10)
 - The number of suggestions should match the scope and complexity of the topic
 - Avoid meta/process items like "research", "planning", "review" - those belong in Deepen mode
 - Each suggestion should be something tangible you could implement/create directly
@@ -23,7 +24,8 @@ IMPORTANT RULES:
 If the topic doesn't lend itself to concrete content items, return an empty additions array with explanation.`,
     defaultObjective:
       'Generate actual concrete content items (chapters, features, columns, components, etc.) that represent the deliverables for this node.',
-    defaultTask: 'Generate meaningful concrete content items (3-10) for this topic based on its scope.',
+    defaultTask:
+      'Generate meaningful concrete content items (3-10) for this topic based on its scope.',
     quickObjectives: {
       children:
         'Generate meaningful concrete content items (3-10) - actual chapters, features, columns, etc. - based on the topic scope.',
@@ -49,6 +51,7 @@ IMPORTANT RULES:
 - These are the HOW-TO steps, milestones, or phases needed to complete the work
 - Keep titles under 8 words, descriptions under 50 words
 - Generate only meaningful process steps (minimum 3, maximum 10) based on task complexity
+- Never default to providing 5 steps; include every strong workflow activity you can justify (cap at 10)
 - The number of steps should reflect the actual workflow needed - simple tasks need fewer steps
 - Think about phases: research → planning → execution → review
 - Each node should represent a distinct stage or activity in the workflow
@@ -145,6 +148,18 @@ export const buildMindmapPrompt = (context: MindmapContextPayload) => {
 ${context.conversationSummary}`
     : null;
 
+  const existingChildren = context.children.length;
+  const densityHint =
+    existingChildren <= 4
+      ? 'This node is still sparse — aim for 7-10 standout ideas unless quality would suffer.'
+      : 'This node already has traction — keep to the 3-8 strongest additions that truly help.';
+
+  const qualityGuidance = `Guidelines:
+- Existing child nodes: ${existingChildren}
+- Return every high-signal ${context.intent === 'spark' ? 'content item' : 'workflow step'} you can justify (minimum 3, maximum 10).
+- Never stop at exactly 5 unless there are genuinely only 5 strong options; double-check if more fit.
+- ${densityHint}`;
+
   const userPrompt = `Mindmap snapshot:
 Primary node: ${context.selectedLabel} (level ${context.selectedLevel})
 Description: ${sanitize(context.selectedDescription) || '(empty)'}
@@ -154,6 +169,7 @@ ${childrenSummary}
 
 Objective: ${baseObjective}
 Task: ${userTask}
+${qualityGuidance}
 ${conversationTail ? `\n${conversationTail}\n` : ''}
 Respond with actionable updates that keep the mindmap balanced.`;
 

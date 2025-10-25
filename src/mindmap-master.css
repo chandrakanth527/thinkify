@@ -9,8 +9,9 @@
   min-width: 240px;
   max-width: 320px;
   padding: 18px 20px 24px;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen,
-    Ubuntu, sans-serif;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu,
+    sans-serif;
   font-size: 15px;
   font-weight: 500;
   color: #0f172a;
@@ -24,7 +25,9 @@
   border: 1px solid rgba(148, 163, 184, 0.35);
   border-radius: 18px;
   box-shadow: 0 8px 18px rgba(15, 23, 42, 0.1);
-  transition: transform 0.22s ease, box-shadow 0.22s ease;
+  transition:
+    transform 0.22s ease,
+    box-shadow 0.22s ease;
 }
 
 .mindmap-master-node:hover {
@@ -49,8 +52,9 @@
   min-width: 240px;
   max-width: 320px;
   padding: 18px 20px 24px;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen,
-    Ubuntu, sans-serif;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu,
+    sans-serif;
   font-size: 14px;
   background: linear-gradient(
     180deg,
@@ -60,7 +64,11 @@
   border: 1px dashed rgba(251, 191, 36, 0.65);
   border-radius: 18px;
   box-shadow: 0 8px 18px rgba(180, 83, 9, 0.12);
-  transition: transform 0.22s ease, box-shadow 0.22s ease, min-width 0.22s ease, max-width 0.22s ease;
+  transition:
+    transform 0.22s ease,
+    box-shadow 0.22s ease,
+    min-width 0.22s ease,
+    max-width 0.22s ease;
 }
 
 .edge-note-node.is-expanded {
@@ -74,8 +82,8 @@
 }
 
 .edge-note-node.is-collapsed {
-  padding: 18px 20px 24px;
   gap: 0;
+  padding: 18px 20px 24px;
 }
 
 .edge-note-body {
@@ -177,16 +185,16 @@
   align-items: center;
   width: 100%;
   padding: 3px 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-size: 15px;
   font-weight: 600;
   line-height: 1.35;
   color: #713f12;
+  white-space: nowrap;
   cursor: pointer;
   background: rgba(254, 243, 199, 0.6);
-  border-radius: 12px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  border-radius: 10px;
 }
 
 .edge-note-editor {
@@ -272,9 +280,9 @@
 }
 
 .edge-note-toolbar button.is-active {
-  background: rgba(249, 115, 22, 0.6);
-  color: #7c2d12;
   font-weight: 700;
+  color: #7c2d12;
+  background: rgba(249, 115, 22, 0.6);
 }
 
 .edge-note-textarea {
@@ -286,7 +294,7 @@
   resize: vertical;
   background: rgba(255, 248, 237, 0.85);
   border: 1px solid rgba(217, 119, 6, 0.35);
-  border-radius: 12px;
+  border-radius: 10px;
 }
 
 .edge-note-textarea:focus {
@@ -305,8 +313,10 @@
   color: #422006;
   background: rgba(255, 248, 237, 0.9);
   border: 1px solid rgba(217, 119, 6, 0.35);
-  border-radius: 12px;
-  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+  border-radius: 10px;
+  transition:
+    border-color 0.18s ease,
+    box-shadow 0.18s ease;
 }
 
 .edge-note-editable:focus {
@@ -327,8 +337,8 @@
 
 .edge-note-editable ul,
 .edge-note-editable ol {
-  margin: 8px 0 8px 18px;
   padding-left: 0;
+  margin: 8px 0 8px 18px;
 }
 
 .edge-note-editable blockquote {
@@ -364,8 +374,10 @@
   color: #422006;
   background: rgba(255, 248, 237, 0.9);
   border: 1px solid rgba(217, 119, 6, 0.35);
-  border-radius: 12px;
-  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+  border-radius: 10px;
+  transition:
+    border-color 0.18s ease,
+    box-shadow 0.18s ease;
 }
 
 .ProseMirror:focus {
@@ -396,8 +408,8 @@
 
 .ProseMirror ul,
 .ProseMirror ol {
-  margin: 8px 0 8px 18px;
   padding-left: 0;
+  margin: 8px 0 8px 18px;
 }
 
 .ProseMirror li {
@@ -423,11 +435,11 @@
 }
 
 .ProseMirror p.is-editor-empty:first-child::before {
-  content: attr(data-placeholder);
   float: left;
   height: 0;
   color: #9ca3af;
   pointer-events: none;
+  content: attr(data-placeholder);
 }
 
 /* Level-specific sizes */
@@ -516,7 +528,7 @@
   color: inherit;
   background: transparent;
   border: none;
-  border-radius: 12px;
+  border-radius: 10px;
   transition: background 0.18s ease;
 }
 
@@ -548,33 +560,26 @@
   box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.6);
 }
 
-.node-status-chip-icon {
-  font-size: 14px;
+.node-status-chip-label {
+  font-size: 12px;
   font-weight: 600;
 }
 
 .node-status-compact {
-  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 26px;
-  height: 26px;
+  width: 24px;
+  height: 24px;
   background: rgba(15, 23, 42, 0.05);
   border-radius: 999px;
 }
 
 .node-status-compact-dot {
-  position: absolute;
-  inset: 6px;
+  width: 12px;
+  height: 12px;
   border-radius: 50%;
-  opacity: 0.25;
-}
-
-.node-status-compact-icon {
-  position: relative;
-  font-size: 12px;
-  font-weight: 600;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.7);
 }
 
 .node-description {
@@ -648,7 +653,9 @@
   border-radius: 50%;
   box-shadow: 0 10px 22px rgba(37, 99, 235, 0.3);
   transform: translateY(-50%);
-  transition: transform 0.18s ease, box-shadow 0.18s ease;
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease;
 }
 
 .mindmap-master-node:hover .node-add-btn,
@@ -681,7 +688,8 @@
   pointer-events: none;
   background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
   border-radius: 50%;
-  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.35),
+  box-shadow:
+    0 10px 24px rgba(15, 23, 42, 0.35),
     0 4px 10px rgba(15, 23, 42, 0.22);
 }
 
@@ -689,71 +697,71 @@
 
 .mindmap-toolbar {
   display: flex;
-  gap: 12px;
   align-items: center;
   padding: 12px;
-  background: white;
+  background: rgba(15, 23, 42, 0.72);
   border-radius: 16px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.28);
+  backdrop-filter: blur(6px);
 }
 
-.toolbar-section {
-  position: relative;
+.toolbar-stack {
   display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.toolbar-stack-group {
+  display: flex;
+  flex-direction: column;
   gap: 8px;
   align-items: center;
 }
 
 .toolbar-divider {
-  width: 1px;
-  height: 24px;
-  background: #e5e7eb;
+  display: block;
+  width: 60%;
+  height: 1px;
+  margin: 4px auto;
+  background: rgba(226, 232, 240, 0.4);
 }
 
-.toolbar-btn {
-  display: flex;
-  gap: 6px;
+.toolbar-icon {
+  display: inline-flex;
   align-items: center;
-  padding: 10px 16px;
-  font-size: 14px;
-  font-weight: 600;
-  color: #334155;
-  cursor: pointer;
-  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  transition: all 0.2s;
-}
-
-.toolbar-btn.icon-only {
   justify-content: center;
   width: 38px;
-  padding: 10px;
+  height: 38px;
+  color: #f8fafc;
+  cursor: pointer;
+  background: rgba(148, 163, 184, 0.18);
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 10px;
+  transition: all 0.18s ease;
 }
 
-.toolbar-btn:hover {
-  background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
-  border-color: #cbd5e1;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+.toolbar-icon:hover:not(:disabled) {
+  background: rgba(99, 102, 241, 0.45);
+  border-color: rgba(99, 102, 241, 0.65);
+  box-shadow: 0 6px 16px rgba(99, 102, 241, 0.24);
   transform: translateY(-1px);
 }
 
-.toolbar-btn.danger {
-  color: #dc2626;
-  background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
-  border-color: #fca5a5;
+.toolbar-icon.is-danger {
+  color: #fee2e2;
+  background: rgba(248, 113, 113, 0.35);
+  border-color: rgba(248, 113, 113, 0.55);
 }
 
-.toolbar-btn.danger:hover {
-  background: linear-gradient(135deg, #fecaca 0%, #fca5a5 100%);
-  border-color: #f87171;
+.toolbar-icon.is-danger:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.45);
+  border-color: rgba(239, 68, 68, 0.75);
 }
 
-.toolbar-btn:disabled,
-.toolbar-btn.icon-only:disabled {
+.toolbar-icon:disabled {
   cursor: not-allowed;
   box-shadow: none;
-  opacity: 0.4;
+  opacity: 0.45;
   transform: none;
 }
 
@@ -816,7 +824,8 @@
   background: rgba(255, 255, 255, 0.96);
   border: 1px solid rgba(226, 232, 240, 0.8);
   border-radius: 14px;
-  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.15),
+  box-shadow:
+    0 12px 30px rgba(15, 23, 42, 0.15),
     0 2px 8px rgba(15, 23, 42, 0.08);
   backdrop-filter: blur(8px);
 }
@@ -847,7 +856,8 @@
   background: white;
   border: 1px solid #e2e8f0;
   border-radius: 14px;
-  box-shadow: 0 16px 32px rgba(15, 23, 42, 0.18),
+  box-shadow:
+    0 16px 32px rgba(15, 23, 42, 0.18),
     0 4px 12px rgba(15, 23, 42, 0.12);
   transform: translateX(-50%);
 }
@@ -880,7 +890,9 @@
   background: transparent;
   border: none;
   border-radius: 10px;
-  transition: background 0.18s ease, transform 0.18s ease;
+  transition:
+    background 0.18s ease,
+    transform 0.18s ease;
 }
 
 .status-option:hover {
@@ -892,13 +904,24 @@
   background: rgba(37, 99, 235, 0.12);
 }
 
-.status-option-icon {
-  font-size: 14px;
-  font-weight: 700;
+.status-option-swatch {
+  flex-shrink: 0;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.7);
 }
 
 .status-option-label {
   flex: 1;
+}
+
+.status-trigger-dot {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.6);
 }
 
 /* Color Picker */
@@ -945,7 +968,7 @@
   line-height: 1.6;
   color: #475569;
   background: rgba(255, 255, 255, 0.95);
-  border-radius: 12px;
+  border-radius: 10px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
   backdrop-filter: blur(10px);
 }
@@ -966,7 +989,7 @@
 .react-flow__minimap {
   background: white;
   border: 2px solid #e5e7eb;
-  border-radius: 12px;
+  border-radius: 10px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
@@ -979,7 +1002,7 @@
 .react-flow__controls {
   background: white;
   border: 2px solid #e5e7eb;
-  border-radius: 12px;
+  border-radius: 10px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
@@ -1135,13 +1158,17 @@
   margin-top: 4px;
   font-size: 12px;
   font-weight: 600;
+  color: #0f172a;
   background: rgba(148, 163, 184, 0.16);
   border: 1px solid rgba(148, 163, 184, 0.4);
   border-radius: 999px;
 }
 
-.ai-chat-status-icon {
-  font-size: 10px;
+.ai-chat-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.7);
 }
 
 .ai-chat-close {
@@ -1266,7 +1293,9 @@
   background: rgba(219, 234, 254, 0.9);
   border: 1px solid rgba(191, 219, 254, 0.95);
   border-radius: 999px;
-  transition: transform 0.18s ease, box-shadow 0.18s ease;
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease;
 }
 
 .ai-chat-chip:hover:not(:disabled) {
@@ -1413,7 +1442,7 @@
   font-size: 12px;
   font-weight: 600;
   color: #475569;
-  background: rgba(148, 163, 184, 0.2);
+  background: rgba(148, 163, 184, 0.18);
   border-radius: 999px;
 }
 
@@ -1506,7 +1535,7 @@
 .ai-chat-mode-switch {
   display: inline-flex;
   padding: 3px;
-  background: rgba(148, 163, 184, 0.2);
+  background: rgba(148, 163, 184, 0.18);
   border-radius: 999px;
   box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.3);
 }
@@ -1520,7 +1549,10 @@
   background: transparent;
   border: none;
   border-radius: 999px;
-  transition: background 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
+  transition:
+    background 0.18s ease,
+    color 0.18s ease,
+    box-shadow 0.18s ease;
 }
 
 .ai-chat-mode-btn:hover {
@@ -1537,79 +1569,6 @@
   margin: 0;
   font-size: 12px;
   color: #475569;
-}
-
-.ai-toolbar-menu {
-  position: relative;
-}
-
-.ai-toolbar-menu .icon-btn.is-open {
-  box-shadow: 0 12px 24px rgba(67, 56, 202, 0.28);
-}
-
-.ai-toolbar-menu-popover {
-  position: absolute;
-  top: 100%;
-  right: 0;
-  z-index: 200;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  min-width: 220px;
-  padding: 8px 10px 10px;
-  margin-top: 4px;
-  background: #ffffff;
-  border: 1px solid rgba(148, 163, 184, 0.35);
-  border-radius: 14px;
-  box-shadow: 0 16px 32px rgba(15, 23, 42, 0.22);
-}
-
-.ai-toolbar-menu-popover::before {
-  content: '';
-  position: absolute;
-  top: -4px;
-  right: 0;
-  left: 0;
-  height: 4px;
-  background: transparent;
-}
-
-.ai-toolbar-menu-item {
-  display: flex;
-  gap: 10px;
-  align-items: flex-start;
-  width: 100%;
-  padding: 8px 9px;
-  font-size: 12px;
-  font-weight: 600;
-  color: #0f172a;
-  text-align: left;
-  cursor: pointer;
-  background: transparent;
-  border: none;
-  border-radius: 10px;
-  transition: background 0.18s ease, transform 0.18s ease;
-}
-
-.ai-toolbar-menu-item:hover {
-  background: rgba(191, 219, 254, 0.45);
-  transform: translateX(2px);
-}
-
-.ai-toolbar-menu-item svg {
-  flex-shrink: 0;
-  color: #2563eb;
-}
-
-.ai-toolbar-menu-title {
-  display: block;
-}
-
-.ai-toolbar-menu-caption {
-  display: block;
-  font-size: 11px;
-  font-weight: 500;
-  color: #64748b;
 }
 
 .ai-chat-loading-spinner {
@@ -1660,8 +1619,10 @@
   resize: vertical;
   background: rgba(248, 250, 252, 0.85);
   border: 1px solid rgba(148, 163, 184, 0.6);
-  border-radius: 12px;
-  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+  border-radius: 10px;
+  transition:
+    border-color 0.18s ease,
+    box-shadow 0.18s ease;
 }
 
 .ai-chat-textarea:focus {
@@ -1695,8 +1656,10 @@
   cursor: pointer;
   background: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%);
   border: none;
-  border-radius: 12px;
-  transition: transform 0.18s ease, box-shadow 0.18s ease;
+  border-radius: 10px;
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease;
 }
 
 .ai-chat-run:disabled {
@@ -1992,22 +1955,22 @@
 }
 
 .ai-chat-selection-item:hover {
-  border-color: #93c5fd;
   background: rgba(255, 255, 255, 0.9);
+  border-color: #93c5fd;
 }
 
 .ai-chat-selection-item.is-selected {
-  border-color: #6366f1;
   background: rgba(99, 102, 241, 0.08);
+  border-color: #6366f1;
   box-shadow: 0 2px 8px rgba(99, 102, 241, 0.12);
 }
 
 .ai-chat-selection-checkbox {
+  flex-shrink: 0;
   width: 16px;
   height: 16px;
   margin-top: 1px;
   cursor: pointer;
-  flex-shrink: 0;
 }
 
 .ai-chat-selection-content {
@@ -2062,8 +2025,8 @@
 
 .ai-chat-btn-ghost-compact:hover:not(:disabled) {
   color: #b91c1c;
-  border-color: #f87171;
   background: rgba(254, 202, 202, 0.1);
+  border-color: #f87171;
 }
 
 .ai-chat-btn-ghost-compact:disabled {
@@ -2082,7 +2045,9 @@
   background: rgba(248, 250, 252, 0.85);
   border: 1px solid rgba(148, 163, 184, 0.5);
   border-radius: 10px;
-  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+  transition:
+    border-color 0.18s ease,
+    box-shadow 0.18s ease;
 }
 
 /* Update primary button for compact mode */
@@ -2125,8 +2090,8 @@
 }
 
 .ai-chat-btn-secondary:hover:not(:disabled) {
-  border-color: #93c5fd;
   background: #ffffff;
+  border-color: #93c5fd;
   box-shadow: 0 2px 8px rgba(59, 130, 246, 0.12);
   transform: translateY(-1px);
 }
@@ -2156,14 +2121,14 @@
   cursor: pointer;
   background: transparent;
   border: 1px solid rgba(148, 163, 184, 0.25);
-  border-radius: 12px;
+  border-radius: 10px;
   transition: all 0.2s ease;
 }
 
 .ai-chat-advanced-header:hover {
   color: #3b82f6;
-  border-color: #3b82f6;
   background: rgba(59, 130, 246, 0.05);
+  border-color: #3b82f6;
 }
 
 .ai-chat-advanced-content {
@@ -2210,7 +2175,7 @@
   cursor: pointer;
   background: rgba(255, 255, 255, 0.95);
   border: 2px solid rgba(148, 163, 184, 0.35);
-  border-radius: 12px;
+  border-radius: 10px;
   transition: all 0.2s ease;
 }
 
@@ -2261,8 +2226,8 @@
 }
 
 .ai-chat-count-option:hover {
-  border-color: #93c5fd;
   background: rgba(255, 255, 255, 0.95);
+  border-color: #93c5fd;
 }
 
 .ai-chat-count-option input[type="radio"] {
@@ -2284,18 +2249,18 @@
 .ai-chat-slider {
   width: 100%;
   height: 6px;
-  cursor: pointer;
   appearance: none;
+  cursor: pointer;
+  outline: none;
   background: linear-gradient(90deg, #e0e7ff 0%, #6366f1 100%);
   border-radius: 999px;
-  outline: none;
 }
 
 .ai-chat-slider::-webkit-slider-thumb {
   width: 20px;
   height: 20px;
-  cursor: pointer;
   appearance: none;
+  cursor: pointer;
   background: #ffffff;
   border: 3px solid #6366f1;
   border-radius: 50%;
@@ -2304,8 +2269,8 @@
 }
 
 .ai-chat-slider::-webkit-slider-thumb:hover {
-  transform: scale(1.1);
   box-shadow: 0 6px 14px rgba(99, 102, 241, 0.4);
+  transform: scale(1.1);
 }
 
 .ai-chat-slider::-moz-range-thumb {
@@ -2320,8 +2285,8 @@
 }
 
 .ai-chat-slider::-moz-range-thumb:hover {
-  transform: scale(1.1);
   box-shadow: 0 6px 14px rgba(99, 102, 241, 0.4);
+  transform: scale(1.1);
 }
 
 .ai-chat-slider-labels {
@@ -2366,13 +2331,13 @@
   padding: 10px 14px;
   background: rgba(226, 232, 240, 0.4);
   border: 1px solid rgba(148, 163, 184, 0.3);
-  border-radius: 12px;
+  border-radius: 10px;
 }
 
 .ai-chat-history-item.user .ai-chat-history-bubble {
+  color: #ffffff;
   background: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%);
   border: none;
-  color: #ffffff;
 }
 
 .ai-chat-history-text {
@@ -2442,7 +2407,7 @@
   text-align: center;
   background: rgba(254, 202, 202, 0.3);
   border: 1px solid rgba(248, 113, 113, 0.5);
-  border-radius: 12px;
+  border-radius: 10px;
 }
 
 .ai-chat-error p {
@@ -2479,27 +2444,27 @@
   cursor: pointer;
   background: rgba(248, 250, 252, 0.8);
   border: 2px solid rgba(148, 163, 184, 0.25);
-  border-radius: 12px;
+  border-radius: 10px;
   transition: all 0.2s ease;
 }
 
 .ai-chat-selection-item:hover {
-  border-color: #93c5fd;
   background: rgba(255, 255, 255, 0.95);
+  border-color: #93c5fd;
 }
 
 .ai-chat-selection-item.is-selected {
-  border-color: #6366f1;
   background: rgba(99, 102, 241, 0.08);
+  border-color: #6366f1;
   box-shadow: 0 4px 12px rgba(99, 102, 241, 0.15);
 }
 
 .ai-chat-selection-checkbox {
+  flex-shrink: 0;
   width: 20px;
   height: 20px;
   margin-top: 2px;
   cursor: pointer;
-  flex-shrink: 0;
 }
 
 .ai-chat-selection-content {
@@ -2549,7 +2514,7 @@
   cursor: pointer;
   background: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%);
   border: none;
-  border-radius: 12px;
+  border-radius: 10px;
   box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
   transition: all 0.2s ease;
 }
@@ -2574,13 +2539,13 @@
   cursor: pointer;
   background: rgba(248, 250, 252, 0.95);
   border: 2px solid rgba(148, 163, 184, 0.4);
-  border-radius: 12px;
+  border-radius: 10px;
   transition: all 0.2s ease;
 }
 
 .ai-chat-btn-secondary:hover:not(:disabled) {
-  border-color: #93c5fd;
   background: #ffffff;
+  border-color: #93c5fd;
   box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
   transform: translateY(-1px);
 }
@@ -2606,8 +2571,8 @@
 
 .ai-chat-btn-ghost:hover:not(:disabled) {
   color: #b91c1c;
-  border-color: #f87171;
   background: rgba(254, 202, 202, 0.1);
+  border-color: #f87171;
 }
 
 .ai-chat-btn-ghost:disabled {

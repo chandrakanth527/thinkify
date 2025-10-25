@@ -8,7 +8,7 @@ import {
   useState,
 } from 'react';
 
-import { IconMagicWand, IconX, IconCollapse, IconExpand } from '@/icons';
+import { IconX } from '@/icons';
 
 type PanelPhase = 'idle' | 'loading' | 'error';
 
@@ -24,7 +24,6 @@ interface NodeSummary {
   childCount: number;
   statusLabel?: string;
   statusColor?: string;
-  statusIcon?: string;
 }
 
 interface QuickAction {
@@ -68,8 +67,8 @@ interface AIChatPanelProps {
   onClose: () => void;
   onSelectQuickAction: (actionId: string) => void;
   onSubmitMessage: (content: string) => void;
-  onAddSuggestion?: (messageId: string) => void;
-  onReplaceSuggestion?: (messageId: string) => void;
+  onAddSuggestion?: (messageId: string, selectedIndexes: number[]) => void;
+  onReplaceSuggestion?: (messageId: string, selectedIndexes: number[]) => void;
   onRejectSuggestion?: (messageId: string) => void;
   mode: AIIntent;
   onModeChange: (intent: AIIntent) => void;
@@ -104,7 +103,9 @@ export const AIChatPanel: FC<AIChatPanelProps> = ({
   phase = 'idle',
 }) => {
   const [draft, setDraft] = useState('');
-  const [selectedSuggestionIds, setSelectedSuggestionIds] = useState<Set<string>>(new Set());
+  const [selectedSuggestionIds, setSelectedSuggestionIds] = useState<
+    Set<string>
+  >(new Set());
   const [refinementPrompt, setRefinementPrompt] = useState('');
 
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
@@ -118,8 +119,6 @@ export const AIChatPanel: FC<AIChatPanelProps> = ({
       >,
     [intentMeta],
   );
-  const activeIntentMeta = intentMeta[mode];
-
   const sortedMessages = useMemo(
     () =>
       [...messages].sort(
@@ -145,9 +144,9 @@ export const AIChatPanel: FC<AIChatPanelProps> = ({
   useEffect(() => {
     if (latestPendingSuggestion) {
       const newIds = new Set(
-        latestPendingSuggestion.suggestion.additions.map((_, idx) =>
-          `${latestPendingSuggestion.message.id}-${idx}`
-        )
+        latestPendingSuggestion.suggestion.additions.map(
+          (_, idx) => `${latestPendingSuggestion.message.id}-${idx}`,
+        ),
       );
       setSelectedSuggestionIds(newIds);
       setRefinementPrompt('');
@@ -169,7 +168,6 @@ export const AIChatPanel: FC<AIChatPanelProps> = ({
     ? {
         label: node.statusLabel,
         color: node.statusColor ?? '#334155',
-        icon: node.statusIcon ?? '○',
       }
     : null;
 
@@ -198,9 +196,13 @@ export const AIChatPanel: FC<AIChatPanelProps> = ({
     }
 
     // Build context: include current suggestions + refinement request
-    const currentSuggestions = latestPendingSuggestion?.suggestion.additions
-      .map((item, idx) => `${idx + 1}. ${item.label}${item.description ? `: ${item.description}` : ''}`)
-      .join('\n') ?? '';
+    const currentSuggestions =
+      latestPendingSuggestion?.suggestion.additions
+        .map(
+          (item, idx) =>
+            `${idx + 1}. ${item.label}${item.description ? `: ${item.description}` : ''}`,
+        )
+        .join('\n') ?? '';
 
     const contextPrompt = `Current suggestions:\n${currentSuggestions}\n\nRefinement request: ${trimmed}`;
 
@@ -226,7 +228,7 @@ export const AIChatPanel: FC<AIChatPanelProps> = ({
   };
 
   const toggleSuggestionSelection = (suggestionId: string) => {
-    setSelectedSuggestionIds(prev => {
+    setSelectedSuggestionIds((prev) => {
       const next = new Set(prev);
       if (next.has(suggestionId)) {
         next.delete(suggestionId);
@@ -241,7 +243,7 @@ export const AIChatPanel: FC<AIChatPanelProps> = ({
     if (!latestPendingSuggestion || selectedCount === 0) {
       return;
     }
-    onAddSuggestion?.(latestPendingSuggestion.message.id);
+    onAddSuggestion?.(latestPendingSuggestion.message.id, []);
   };
 
   const handleStartOver = () => {
@@ -280,11 +282,13 @@ export const AIChatPanel: FC<AIChatPanelProps> = ({
             <span
               className="ai-chat-status"
               style={{
-                color: statusBadge.color,
                 borderColor: statusBadge.color,
               }}
             >
-              <span className="ai-chat-status-icon">{statusBadge.icon}</span>
+              <span
+                className="ai-chat-status-dot"
+                style={{ background: statusBadge.color }}
+              />
               {statusBadge.label}
             </span>
           )}
@@ -335,11 +339,12 @@ export const AIChatPanel: FC<AIChatPanelProps> = ({
                 >
                   <div className="ai-chat-history-bubble">
                     <p className="ai-chat-history-text">{message.content}</p>
-                    {message.suggestion && message.suggestion.status !== 'pending' && (
-                      <span className="ai-chat-history-badge">
-                        {message.suggestion.status === 'accepted' ? '✓' : '✗'}
-                      </span>
-                    )}
+                    {message.suggestion &&
+                      message.suggestion.status !== 'pending' && (
+                        <span className="ai-chat-history-badge">
+                          {message.suggestion.status === 'accepted' ? '✓' : '✗'}
+                        </span>
+                      )}
                   </div>
                 </div>
               ))}
@@ -367,7 +372,10 @@ export const AIChatPanel: FC<AIChatPanelProps> = ({
               </div>
             )}
 
-            <form className="ai-chat-generate-form" onSubmit={handleGenerateSubmit}>
+            <form
+              className="ai-chat-generate-form"
+              onSubmit={handleGenerateSubmit}
+            >
               <textarea
                 className="ai-chat-textarea"
                 disabled={!hasNode || phase === 'loading'}
@@ -383,7 +391,9 @@ export const AIChatPanel: FC<AIChatPanelProps> = ({
               />
               <button
                 className="ai-chat-btn-primary"
-                disabled={!hasNode || phase === 'loading' || draft.trim().length === 0}
+                disabled={
+                  !hasNode || phase === 'loading' || draft.trim().length === 0
+                }
                 type="submit"
               >
                 {phase === 'loading' ? 'Generating...' : 'Generate'}
@@ -434,7 +444,9 @@ export const AIChatPanel: FC<AIChatPanelProps> = ({
                     />
                     <div className="ai-chat-selection-content">
                       {item.emoji && (
-                        <span className="ai-chat-selection-emoji">{item.emoji}</span>
+                        <span className="ai-chat-selection-emoji">
+                          {item.emoji}
+                        </span>
                       )}
                       <strong>{item.label}</strong>
                       {item.description && (
@@ -448,7 +460,10 @@ export const AIChatPanel: FC<AIChatPanelProps> = ({
               })}
             </div>
 
-            <form className="ai-chat-refinement-form" onSubmit={handleRefinementSubmit}>
+            <form
+              className="ai-chat-refinement-form"
+              onSubmit={handleRefinementSubmit}
+            >
               <textarea
                 className="ai-chat-textarea"
                 disabled={phase === 'loading'}
@@ -461,7 +476,9 @@ export const AIChatPanel: FC<AIChatPanelProps> = ({
               <div className="ai-chat-review-actions">
                 <button
                   className="ai-chat-btn-secondary"
-                  disabled={phase === 'loading' || refinementPrompt.trim().length === 0}
+                  disabled={
+                    phase === 'loading' || refinementPrompt.trim().length === 0
+                  }
                   type="submit"
                 >
                   {phase === 'loading' ? 'Refining...' : 'Refine'}
